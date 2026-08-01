@@ -7,13 +7,11 @@ import ModifyResponse from "./modify-response";
 import ShareChat from "./share-chat";
 import { FiMoreVertical } from "react-icons/fi";
 import DevPopover from "../dev-components/dev-popover";
-import { Toaster, toast } from 'sonner'
 import { MdContentCopy, MdOutlineFlag } from "react-icons/md";
 import geminiZustand from "@/utils/gemini-zustand";
 import { FcGoogle } from "react-icons/fc";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Link from "next/link";
 import { IoMdSearch } from "react-icons/io";
+import { parseApiError } from "@/utils/chat-api-client";
 
 
 const ChatActionsBtns = ({
@@ -27,9 +25,7 @@ const ChatActionsBtns = ({
   userPrompt: string;
   shareMsg: string;
 }) => {
-  const { devToast, setToast } = geminiZustand();
-  const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_API_KEY as string);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const { setToast } = geminiZustand();
   const [googleRes, setGoogleRes] = useState<string[] | null>(null)
   const [loader, setLoader] = useState(false)
 
@@ -43,21 +39,27 @@ const ChatActionsBtns = ({
   };
 
   const handleDoubleCheck = async () => {
-    const prompt = `
-      Generate a list of at least 5 different Google search queries based strictly on the user prompt. Provide the queries in an array format without any unnecessary responses. Ensure the queries are relevant and varied but aligned with the user's prompt.
-      Previous chats:
-      Current User Query:
-      ${userPrompt}`
     try {
       setLoader(true)
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      const googleResArray = JSON.parse(text);
-      setGoogleRes(googleResArray)
+      const response = await fetch("/api/chat/double-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userPrompt }),
+      });
 
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const data = (await response.json()) as { queries?: string[] };
+      setGoogleRes(data.queries ?? [])
     } catch (error) {
       console.log(error)
+      setToast(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate search queries"
+      );
     }
     finally {
       setLoader(false)

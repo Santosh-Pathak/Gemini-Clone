@@ -13,20 +13,19 @@ import { lowlight } from "lowlight";
 import { Markdown as TipTapMkd } from "tiptap-markdown";
 import { FormatOutput } from "@/utils/shadow";
 import root from "react-shadow/styled-components";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import geminiZustand from "@/utils/gemini-zustand";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import { createPortal } from "react-dom";
 import { updateResponse } from "@/actions/actions";
 import DevButton from "../dev-components/dev-button";
-import { MdImageSearch, MdOutlineImage, MdOutlineModeEditOutline } from "react-icons/md";
+import { MdOutlineImage, MdOutlineModeEditOutline } from "react-icons/md";
 import { SiGooglegemini } from "react-icons/si";
 
 import Image from "next/image";
 import ReactTooltip from "../dev-components/react-tooltip";
 import TextToSpeech from "./text-to-speech";
 import ChatActionsBtns from "./chat-actions-btns";
-import { BsImage } from "react-icons/bs";
+import { parseApiError } from "@/utils/chat-api-client";
 
 const extensions = [
   StarterKit,
@@ -72,8 +71,6 @@ const ChatProvider: React.FC<{
   const [promptModify, setPromptModify] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_API_KEY as string);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   const editor = useEditor({
     extensions,
@@ -93,39 +90,38 @@ const ChatProvider: React.FC<{
   const handlePrompt = async (
     promptType: keyof typeof PROMPT_TYPES | "Custom"
   ) => {
-    let prompt;
-    if (promptType === "Custom") {
-      prompt = `This is the whole response: ${initialResponse}. ${inputRef.current?.value} Specifically focus on this part: "${selectedNode}". Ensure the modified part aligns seamlessly with the rest of the response. Provide the entire modified response back, preserving the essential introductory and concluding phrases without adding any new non-contextual information.`;
-    } else {
-      const promptInstructions = {
-        Longer: "Lengthen",
-        Shorter: "Shorten",
-        Regenerate: "Regenerate",
-        Remove: "Remove",
-        Simplify: "Simplify the language of",
-        Elaborate: "Elaborate on",
-        Formalize: "Rewrite in a more formal tone",
-        Casual: "Rewrite in a more casual tone",
-        Persuasive: "Rewrite to be more persuasive",
-        Technical: "Add more technical details to",
-        Metaphor: "Incorporate a relevant metaphor into",
-        Examples: "Add relevant examples to",
-        Counterargument: "Present a counterargument to",
-        Summary: "Provide a concise summary of",
-      };
-      prompt = `This is the whole response: ${initialResponse}. ${promptInstructions[promptType]} a specific part of the response, specifically "${selectedNode}". Ensure it aligns seamlessly with the rest of the response. Provide the entire modified response back, preserving the essential introductory and concluding phrases without adding any new non-contextual information.`;
-    }
-
     try {
       setUpdateLoader(true);
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const response = await fetch("/api/chat/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullResponse: initialResponse,
+          selectedText: selectedNode,
+          promptType,
+          customInstruction:
+            promptType === "Custom" ? inputRef.current?.value : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const { text } = (await response.json()) as { text?: string };
       if (!text) throw new Error("Error while generating prompt");
+
       const updatedContent = await updateResponse({
         chatUniqueId,
         updatedResponse: text,
       });
+      if (!updatedContent.success || !updatedContent.message?.message) {
+        throw new Error(
+          typeof updatedContent.message === "string"
+            ? updatedContent.message
+            : "Failed to save rewritten response"
+        );
+      }
       setInitialResponse(updatedContent.message.message.llmResponse as string);
       editor?.commands.setContent(
         updatedContent.message.message.llmResponse as string

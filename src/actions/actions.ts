@@ -6,25 +6,34 @@ import { Types } from "mongoose";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 
+async function requireSessionUserId() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    throw new Error("User not authenticated");
+  }
+  return session.user.id;
+}
+
+function assertSameUser(sessionUserId: string, requestedUserId: string) {
+  if (sessionUserId !== requestedUserId) {
+    throw new Error("Forbidden");
+  }
+}
 
 export const createChat = async (
   chat: Message & { userID: string; chatID: string; imgName?: string }
 ) => {
   try {
-    const session = await auth();
-    if (!session) {
-      throw new Error("User not authenticated");
-    }
-    const {user}=session
+    const userId = await requireSessionUserId();
+    assertSameUser(userId, chat.userID);
     await connectDB();
     const { userPrompt, llmResponse, chatID, imgName } = chat;
     const data = await Chat.create({
-      participant: user?.id,
+      participant: userId,
       chatID,
-      message: { userPrompt, llmResponse, imgName},
+      message: { userPrompt, llmResponse, imgName },
     });
-    revalidatePath(`/app/[${chatID}]`);
-    // Serialize the data
+    revalidatePath(`/app/${chatID}`);
     const serializedData = JSON.parse(JSON.stringify(data));
     return { message: serializedData, success: true };
   } catch (error: any) {
@@ -35,9 +44,11 @@ export const createChat = async (
 
 export const getSidebarChat = async (userID: string) => {
   try {
+    const sessionUserId = await requireSessionUserId();
+    assertSameUser(sessionUserId, userID);
     await connectDB();
     const data = await Chat.aggregate([
-      { $match: { participant: new Types.ObjectId(userID) } },
+      { $match: { participant: new Types.ObjectId(sessionUserId) } },
       {
         $group: {
           _id: "$chatID",
@@ -45,12 +56,12 @@ export const getSidebarChat = async (userID: string) => {
         },
       },
       { $replaceRoot: { newRoot: "$doc" } },
-      { $sort: { isPinned: -1, createdAt: -1 } }, // Sort by isPinned (descending) then createdAt (descending)
+      { $sort: { isPinned: -1, createdAt: -1 } },
     ]);
     return { success: true, message: JSON.parse(JSON.stringify(data)) };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in getSidebarChat:", error);
-    return { success: false };
+    return { success: false, message: error.message };
   }
 };
 
@@ -62,35 +73,33 @@ export const getChatHistory = async ({
   chatID: string;
 }) => {
   try {
+    const sessionUserId = await requireSessionUserId();
+    assertSameUser(sessionUserId, userID);
     await connectDB();
     const data = await Chat.find({
-      participant: new Types.ObjectId(userID),
+      participant: new Types.ObjectId(sessionUserId),
       chatID: chatID,
     });
     return { success: true, message: JSON.parse(JSON.stringify(data)) };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in getChatHistory:", error);
-    return { success: false };
+    return { success: false, message: error.message };
   }
 };
 
 export const deleteChat = async (chatID: string) => {
   try {
     await connectDB();
-    const session = await auth();
-    if(!session){
-      throw new Error("User not authenticated")
-    }
-    const {user}=session
+    const userId = await requireSessionUserId();
     const data = await Chat.deleteMany({
-      participant: new Types.ObjectId(user?.id),
+      participant: new Types.ObjectId(userId),
       chatID: chatID,
     });
     revalidatePath("/app");
     return { success: true, message: JSON.parse(JSON.stringify(data)) };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in deleteChat:", error);
-    return { success: false };
+    return { success: false, message: error.message };
   }
 };
 
@@ -99,11 +108,8 @@ export const renameChat = async (
   message: Partial<{ title: string | null; icon: string | null }>
 ) => {
   try {
-    const session = await auth();
-    if(!session){
-      throw new Error("User not authenticated")
-    }
-    const {user}=session
+    const userId = await requireSessionUserId();
+    await connectDB();
 
     const chatInfo = {
       ...(message.title ? { title: message.title } : {}),
@@ -112,11 +118,10 @@ export const renameChat = async (
 
     const result = await Chat.updateMany(
       {
-        participant: new Types.ObjectId(user?.id),
+        participant: new Types.ObjectId(userId),
         chatID,
       },
-      { $set: { chatInfo } },
-      { new: true }
+      { $set: { chatInfo } }
     );
 
     if (!result) {
@@ -127,32 +132,26 @@ export const renameChat = async (
     }
     revalidatePath("/app");
     return { success: true, message: JSON.parse(JSON.stringify(result)) };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in renameChat:", error);
     return {
       success: false,
-      message: "An error occurred while renaming the chat",
+      message: error.message || "An error occurred while renaming the chat",
     };
   }
 };
 
 export const pinChat = async (chatID: string, pinStatus: boolean) => {
   try {
-    const session = await auth();
-    if(!session){
-      throw new Error("User not authenticated")
-    }
-    const {user}=session
+    const userId = await requireSessionUserId();
     await connectDB();
-    
 
     const result = await Chat.updateMany(
       {
-        participant: new Types.ObjectId(user?.id),
+        participant: new Types.ObjectId(userId),
         chatID,
       },
-      { $set: { isPinned: pinStatus } },
-      { new: true }
+      { $set: { isPinned: pinStatus } }
     );
     if (!result) {
       return {
@@ -162,11 +161,11 @@ export const pinChat = async (chatID: string, pinStatus: boolean) => {
     }
     revalidatePath("/app");
     return { success: true, message: JSON.parse(JSON.stringify(result)) };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in pinChat:", error);
     return {
       success: false,
-      message: "An error occurred while pinning the chat",
+      message: error.message || "An error occurred while pinning the chat",
     };
   }
 };
@@ -179,8 +178,14 @@ export const updateResponse = async ({
   updatedResponse: string;
 }) => {
   try {
-    const updatedChat = await Chat.findByIdAndUpdate(
-      chatUniqueId,
+    const userId = await requireSessionUserId();
+    await connectDB();
+
+    const updatedChat = await Chat.findOneAndUpdate(
+      {
+        _id: chatUniqueId,
+        participant: new Types.ObjectId(userId),
+      },
       {
         $set: {
           "message.llmResponse": updatedResponse,
@@ -192,47 +197,18 @@ export const updateResponse = async ({
     if (!updatedChat) {
       return {
         success: false,
-        message: "Chat not found",
+        message: "Chat not found or user not authorized",
       };
     }
     return {
       success: true,
       message: JSON.parse(JSON.stringify(updatedChat)),
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating response:", error);
     return {
       success: false,
-      message: "An error occurred while updating response",
+      message: error.message || "An error occurred while updating response",
     };
   }
 };
-
-// export const generateResponse = async (prompt: string) => {
-//   try {
-//     await connectDB();
-//     if (!prompt) {
-//       throw new Error("Prompt is empty");
-//     }
-//     const res = await axios.post(
-//       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.NEXT_PUBLIC_API_KEY}`,
-//       {
-//         contents: [{ parts: [{ text: prompt }] }],
-//       }
-//     );
-//     const generatedResponse = res.data.candidates[0].content.parts[0].text;
-//     if (!res || !generatedResponse) {
-//       throw new Error("Failed to generate response");
-//     }
-
-//     return {
-//       success: true,
-//       message: generatedResponse,
-//     };
-//   } catch (error) {
-//     return {
-//       success: false,
-//       message: error,
-//     };
-//   }
-// };

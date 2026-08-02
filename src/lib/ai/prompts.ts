@@ -1,80 +1,82 @@
-const DEFAULT_SYSTEM_INSTRUCTION = `User is seeking a wise and impressive response. Consider including necessary details, context, and thoughtful insights. Aim to provide a comprehensive, well-structured, and articulate answer. Respond in a friendly and natural manner, using terms like "buddy" or other friendly expressions. Provide a complete and final response without asking any further questions.`;
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-export function buildChatPrompt({
-  userPrompt,
-  previousUserPrompt,
-  previousLlmResponse,
-  customPrompt,
-}: {
-  userPrompt: string;
-  previousUserPrompt?: string | null;
-  previousLlmResponse?: string | null;
-  customPrompt?: string | null;
-}) {
-  const date = new Date().toISOString().split("T")[0];
-  const instruction =
-    customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION;
+export const DEFAULT_SYSTEM_INSTRUCTION = `You are a helpful Gemini-style assistant. Provide comprehensive, well-structured, and articulate answers. Respond in a friendly and natural manner. Provide a complete final response without asking unnecessary follow-up questions.`;
 
-  return `
-Date: ${date}
+export const REWRITE_INSTRUCTIONS: Record<string, string> = {
+  Longer: "Lengthen",
+  Shorter: "Shorten",
+  Regenerate: "Regenerate",
+  Remove: "Remove",
+  Simplify: "Simplify the language of",
+  Elaborate: "Elaborate on",
+  Formalize: "Rewrite in a more formal tone",
+  Casual: "Rewrite in a more casual tone",
+  Persuasive: "Rewrite to be more persuasive",
+  Technical: "Add more technical details to",
+  Metaphor: "Incorporate a relevant metaphor into",
+  Examples: "Add relevant examples to",
+  Counterargument: "Present a counterargument to",
+  Summary: "Provide a concise summary of",
+};
 
-${instruction}
+export const chatPromptTemplate = ChatPromptTemplate.fromMessages([
+  [
+    "system",
+    `Date: {date}
 
-Previous chats:
-User: ${previousUserPrompt || ""}
-LLM Response: ${previousLlmResponse || ""}
+{systemInstruction}
 
-Current User Query:
-${userPrompt}
-`.trim();
-}
+Previous conversation turn:
+User: {previousUserPrompt}
+Assistant: {previousLlmResponse}`,
+  ],
+  ["human", "{userPrompt}"],
+]);
 
-export function buildRewritePrompt({
-  fullResponse,
-  selectedText,
-  instruction,
-}: {
-  fullResponse: string;
-  selectedText: string;
-  instruction: string;
-}) {
-  return `This is the whole response: ${fullResponse}. ${instruction} a specific part of the response, specifically "${selectedText}". Ensure it aligns seamlessly with the rest of the response. Provide the entire modified response back, preserving the essential introductory and concluding phrases without adding any new non-contextual information.`;
-}
+export const rewritePromptTemplate = ChatPromptTemplate.fromMessages([
+  [
+    "system",
+    "You rewrite assistant replies. Return the entire modified response only — no preamble.",
+  ],
+  [
+    "human",
+    `This is the whole response:
+{fullResponse}
 
-export function buildDoubleCheckPrompt(userPrompt: string) {
-  return `
-Generate a list of at least 5 different Google search queries based strictly on the user prompt.
-Return ONLY a valid JSON array of strings — no markdown fences, no commentary.
-Ensure the queries are relevant and varied but aligned with the user's prompt.
+Instruction: {instruction}
+Focus specifically on this part: "{selectedText}"
+
+Ensure the modified part aligns seamlessly with the rest of the response. Provide the entire modified response back, preserving essential introductory and concluding phrases without adding non-contextual information.`,
+  ],
+]);
+
+export const customRewritePromptTemplate = ChatPromptTemplate.fromMessages([
+  [
+    "system",
+    "You rewrite assistant replies. Return the entire modified response only — no preamble.",
+  ],
+  [
+    "human",
+    `This is the whole response:
+{fullResponse}
+
+Custom instruction: {customInstruction}
+Specifically focus on this part: "{selectedText}"
+
+Ensure the modified part aligns seamlessly with the rest of the response. Provide the entire modified response back, preserving essential introductory and concluding phrases without adding non-contextual information.`,
+  ],
+]);
+
+export const doubleCheckPromptTemplate = ChatPromptTemplate.fromMessages([
+  [
+    "system",
+    "You generate Google search queries that help fact-check or explore a user prompt. Follow the output schema exactly.",
+  ],
+  [
+    "human",
+    `Generate at least 5 different Google search queries based strictly on this user prompt. Make them relevant and varied.
 
 User prompt:
-${userPrompt}
-`.trim();
-}
-
-/** Best-effort parse of a JSON string array from model output. */
-export function parseJsonStringArray(text: string): string[] {
-  const cleaned = text
-    .replace(/```json\s*/gi, "")
-    .replace(/```/g, "")
-    .trim();
-
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
-      return parsed;
-    }
-  } catch {
-    // fall through to bracket extraction
-  }
-
-  const match = cleaned.match(/\[[\s\S]*\]/);
-  if (match) {
-    const parsed = JSON.parse(match[0]);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((x): x is string => typeof x === "string");
-    }
-  }
-
-  throw new Error("Model did not return a valid JSON string array");
-}
+{userPrompt}`,
+  ],
+]);

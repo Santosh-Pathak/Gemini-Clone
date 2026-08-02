@@ -31,6 +31,8 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setUserData,
     setOptimisticResponse,
     setOptimisticPrompt,
+    selectedModel,
+    setSelectedModel,
   } = geminiZustand();
   const [inputImg, setInputImg] = useState<File | null>(null);
 
@@ -70,6 +72,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
           previousUserPrompt: prevChat.userPrompt,
           previousLlmResponse: prevChat.llmResponse,
           customPrompt: customPrompt.prompt,
+          model: selectedModel,
           image: imagePayload,
         }),
       });
@@ -88,8 +91,9 @@ const InputPrompt = ({ user }: { user?: User }) => {
         controller.signal
       );
 
-      if (cancelledRef.current) {
-        text = "User has aborted the request";
+      if (cancelledRef.current || controller.signal.aborted) {
+        setOptimisticResponse("User has aborted the request");
+        return;
       }
 
       if (!text) return;
@@ -121,8 +125,11 @@ const InputPrompt = ({ user }: { user?: User }) => {
       setInputImgName(null);
       setCurrChat("userPrompt", null);
       setCurrChat("llmResponse", null);
-      setOptimisticResponse(null);
-      setOptimisticPrompt(null);
+      // Keep abort banner visible; clear optimistic only after a successful save path.
+      if (!cancelledRef.current) {
+        setOptimisticResponse(null);
+        setOptimisticPrompt(null);
+      }
       if (abortRef.current === controller) {
         abortRef.current = null;
       }
@@ -133,6 +140,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
     chatID,
     prevChat,
     customPrompt.prompt,
+    selectedModel,
     inputImg,
     inputImgName,
     setCurrChat,
@@ -209,6 +217,21 @@ const InputPrompt = ({ user }: { user?: User }) => {
           inputImgName && " !rounded-tl-none "
         } overflow-hidden bg-rtlLight dark:bg-rtlDark flex gap-1 md:items-center md:justify-between md:flex-row flex-col `}
       >
+        <div className="flex items-center gap-2 pl-4 pt-2 md:pt-0">
+          <label htmlFor="model-select" className="sr-only">
+            Model
+          </label>
+          <select
+            id="model-select"
+            value={selectedModel}
+            disabled={msgLoader}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="text-xs md:text-sm bg-transparent border border-accentGray/30 rounded-full px-3 py-1 outline-none opacity-80 hover:opacity-100"
+          >
+            <option value="gemini-1.5-flash">Flash</option>
+            <option value="gemini-1.5-pro">Pro</option>
+          </select>
+        </div>
         <textarea
           name="prompt"
           ref={inputRref}

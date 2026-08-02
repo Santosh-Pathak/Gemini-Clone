@@ -1,8 +1,4 @@
-import { getGeminiModel } from "@/lib/ai/gemini";
-import {
-  buildDoubleCheckPrompt,
-  parseJsonStringArray,
-} from "@/lib/ai/prompts";
+import { generateDoubleCheckQueries } from "@/lib/ai/chains/double-check";
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
 import { MAX_PROMPT_LENGTH } from "@/lib/ai/constants";
 import { NextResponse } from "next/server";
@@ -35,19 +31,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const model = getGeminiModel();
-    const result = await model.generateContent(
-      buildDoubleCheckPrompt(userPrompt)
-    );
-    const text = result.response.text();
-    const queries = parseJsonStringArray(text);
-
-    if (queries.length === 0) {
-      return NextResponse.json(
-        { error: "No search queries generated." },
-        { status: 502 }
-      );
-    }
+    const { queries } = await generateDoubleCheckQueries({ userPrompt });
 
     return NextResponse.json({ queries });
   } catch (error) {

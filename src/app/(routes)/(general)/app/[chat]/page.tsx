@@ -8,13 +8,15 @@ const Page = async ({ params }: { params: { chat: string } }) => {
   const session = await auth();
   const { chat } = params;
 
+  if (!session?.user?.id) redirect("/app");
+
   const fetchedData = await getChatHistory({
     chatID: chat,
-    userID: session?.user?.id as string,
+    userID: session.user.id,
   });
-  if (!fetchedData.success || !session) redirect("/app");
+  if (!fetchedData.success) redirect("/app");
   const { message } = fetchedData;
-  const { name, image } = session?.user as { name: string; image: string };
+  const { name, image } = session.user as { name: string; image: string };
 
   return (
       <div className="w-full max-w-3xl mx-auto p-4 pb-40">

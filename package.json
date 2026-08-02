@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.14.1",
+    "@langchain/core": "^0.3.58",
+    "@langchain/google-genai": "^0.2.9",
     "@tiptap/extension-bubble-menu": "^2.4.0",
     "@tiptap/extension-code-block-lowlight": "^2.4.0",
     "@tiptap/pm": "^2.4.0",
@@ -19,6 +21,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.2.13",
     "highlight.js": "^11.10.0",
+    "langchain": "^0.3.27",
     "lowlight": "^2.9.0",
     "mongoose": "^7.0.3",
     "nanoid": "^5.0.7",
@@ -42,6 +45,7 @@
     "tailwindcss-all": "^0.0.2",
     "tiptap-markdown": "^0.8.10",
     "use-ripple-hook": "^1.0.24",
+    "zod": "^3.24.2",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

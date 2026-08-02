@@ -24,6 +24,8 @@ interface GeminiState {
   setOptimisticPrompt:(optimisticPrompt:string | null)=>void
   customPrompt:{prompt:string|null, placeholder:string|null},
   setCustomPrompt:(value:{prompt:string|null, placeholder:string|null})=>void
+  selectedModel: string,
+  setSelectedModel:(model: string)=>void
 }
 
 const geminiZustand = create<GeminiState>()((set) => ({
@@ -38,6 +40,8 @@ const geminiZustand = create<GeminiState>()((set) => ({
   inputImgName:null,
   customPrompt:{prompt:null, placeholder:null},
   setCustomPrompt:(value:{prompt:string|null, placeholder:string|null})=>set({customPrompt:value}),
+  selectedModel: "gemini-1.5-flash",
+  setSelectedModel:(selectedModel: string)=>set({selectedModel}),
   setOptimisticPrompt:(value:string|null)=>set({optimisticPrompt:value}),
   setInputImgName:(value:string|null)=>set({inputImgName:value}),
   currChat: { userPrompt: "", llmResponse: "" },

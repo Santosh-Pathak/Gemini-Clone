@@ -8,7 +8,9 @@ import DevToast from "@/components/dev-components/dev-toast";
 
 const GeneralLayout = async ({ children }: { children: React.ReactNode }) => {
   const session = await auth();
-  const sidebarList = await getSidebarChat(session?.user?.id as string);
+  const sidebarList = session?.user?.id
+    ? await getSidebarChat(session.user.id)
+    : { success: true, message: [] };
 
   return (
     <main className="h-dvh w-full flex overflow-hidden">

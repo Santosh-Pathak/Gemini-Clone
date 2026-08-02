@@ -1,24 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_MODEL } from "./constants";
-
-let client: GoogleGenerativeAI | null = null;
-
-function getClient() {
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "GOOGLE_API_KEY is not set. Add it to your server environment (.env)."
-    );
-  }
-  if (!client) {
-    client = new GoogleGenerativeAI(apiKey);
-  }
-  return client;
-}
-
-export function getGeminiModel(model = GEMINI_MODEL) {
-  return getClient().getGenerativeModel({ model });
-}
+/**
+ * @deprecated Phase 2 uses LangChain (`./llm`). Kept as a thin re-export
+ * so any leftover imports keep working during the migration.
+ */
+export { getChatModel as getGeminiModel, contentToText } from "./llm";
 
 export type InlineImagePart = {
   inlineData: {

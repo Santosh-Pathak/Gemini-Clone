@@ -1,5 +1,8 @@
-import { getGeminiModel, type InlineImagePart } from "@/lib/ai/gemini";
-import { buildChatPrompt } from "@/lib/ai/prompts";
+import {
+  invokeChatWithImage,
+  streamChatReply,
+} from "@/lib/ai/chains/chat";
+import { contentToText, isGeminiModelId } from "@/lib/ai/llm";
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
 import {
   MAX_IMAGE_BASE64_LENGTH,
@@ -14,6 +17,7 @@ type ChatRequestBody = {
   previousUserPrompt?: string | null;
   previousLlmResponse?: string | null;
   customPrompt?: string | null;
+  model?: string;
   image?: {
     data: string;
     mimeType: string;
@@ -51,6 +55,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (body.model && !isGeminiModelId(body.model)) {
+      return NextResponse.json(
+        { error: "Unsupported model." },
+        { status: 400 }
+      );
+    }
+
     if (body.image?.data) {
       if (body.image.data.length > MAX_IMAGE_BASE64_LENGTH) {
         return NextResponse.json(
@@ -66,25 +77,21 @@ export async function POST(req: Request) {
       }
     }
 
-    const prompt = buildChatPrompt({
+    const chainInput = {
       userPrompt: message,
       previousUserPrompt: body.previousUserPrompt,
       previousLlmResponse: body.previousLlmResponse,
       customPrompt: body.customPrompt,
-    });
+      model: body.model && isGeminiModelId(body.model) ? body.model : undefined,
+      image: body.image,
+    };
 
-    const model = getGeminiModel();
-
-    // Multimodal: non-streaming (SDK streams text-only more reliably here)
+    // Multimodal: non-streaming invoke
     if (body.image?.data) {
-      const imagePart: InlineImagePart = {
-        inlineData: {
-          data: body.image.data,
-          mimeType: body.image.mimeType,
-        },
-      };
-      const result = await model.generateContent([prompt, imagePart]);
-      const text = result.response.text();
+      const text = await invokeChatWithImage({
+        ...chainInput,
+        image: body.image,
+      });
 
       return new Response(text, {
         status: 200,
@@ -95,18 +102,18 @@ export async function POST(req: Request) {
       });
     }
 
-    const result = await model.generateContentStream(prompt);
+    const lcStream = await streamChatReply(chainInput);
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of result.stream) {
+          for await (const chunk of lcStream) {
             if (req.signal.aborted) {
               controller.close();
               return;
             }
-            const chunkText = chunk.text();
+            const chunkText = contentToText(chunk.content);
             if (chunkText) {
               controller.enqueue(encoder.encode(chunkText));
             }
@@ -121,7 +128,7 @@ export async function POST(req: Request) {
         }
       },
       cancel() {
-        // Client aborted (AbortController) — stop consuming the upstream stream.
+        // Client aborted via AbortController.
       },
     });
 

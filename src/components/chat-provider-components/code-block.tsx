@@ -1,31 +1,13 @@
 'use client'
 
-import { NodeViewContent, NodeViewWrapper } from '@tiptap/react';
+import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
 import React, { useRef, useState } from 'react';
 import { IoCheckmarkDoneSharp } from 'react-icons/io5';
 import { MdContentCopy } from 'react-icons/md';
 
-interface NodeAttrs {
-  language: string;
-  // Add other properties of the attrs object here
-}
-
-interface Node {
-  attrs: NodeAttrs;
-  // Add other properties of the node object here
-}
-
-const CodeBlock = ({
-  node: {
-    attrs: { language: defaultLanguage },
-  },
-  updateAttributes,
-  extension,
-}: {
-  node: Node;
-  updateAttributes: (attributes: { language: string }) => void;
-  extension: any; // Add the correct type for the extension prop
-}) => {
+const CodeBlock = ({ node }: ReactNodeViewProps) => {
+  const defaultLanguage =
+    typeof node.attrs?.language === 'string' ? node.attrs.language : null;
   const codeRef = useRef<HTMLPreElement>(null);
   const [isCopying, setIsCopying] = useState(false);
 
@@ -48,7 +30,6 @@ const CodeBlock = ({
     }
   };
 
-  // Safely capitalize the first letter of the language
   const capitalizedLanguage = defaultLanguage
     ? defaultLanguage.charAt(0).toUpperCase() + defaultLanguage.slice(1)
     : 'Code';

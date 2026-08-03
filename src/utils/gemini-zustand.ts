@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import { Message } from "../types/types";
+import { Message, RagSource } from "../types/types";
 import { User } from "next-auth";
 
 export type MemoryHint = {
@@ -38,6 +38,12 @@ interface GeminiState {
   setSelectedModel: (model: string) => void;
   memoryHint: MemoryHint;
   setMemoryHint: (hint: MemoryHint) => void;
+  useKnowledge: boolean;
+  setUseKnowledge: (useKnowledge: boolean) => void;
+  knowledgeDocCount: number;
+  setKnowledgeDocCount: (count: number) => void;
+  optimisticRagSources: RagSource[] | null;
+  setOptimisticRagSources: (sources: RagSource[] | null) => void;
 }
 
 const geminiZustand = create<GeminiState>()((set) => ({
@@ -56,6 +62,12 @@ const geminiZustand = create<GeminiState>()((set) => ({
   setSelectedModel: (selectedModel: string) => set({ selectedModel }),
   memoryHint: null,
   setMemoryHint: (memoryHint) => set({ memoryHint }),
+  useKnowledge: false,
+  setUseKnowledge: (useKnowledge) => set({ useKnowledge }),
+  knowledgeDocCount: 0,
+  setKnowledgeDocCount: (knowledgeDocCount) => set({ knowledgeDocCount }),
+  optimisticRagSources: null,
+  setOptimisticRagSources: (optimisticRagSources) => set({ optimisticRagSources }),
   setOptimisticPrompt: (value: string | null) =>
     set({ optimisticPrompt: value }),
   setInputImgName: (value: string | null) => set({ inputImgName: value }),

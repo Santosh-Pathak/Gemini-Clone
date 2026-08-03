@@ -25,7 +25,9 @@ import Image from "next/image";
 import ReactTooltip from "../dev-components/react-tooltip";
 import TextToSpeech from "./text-to-speech";
 import ChatActionsBtns from "./chat-actions-btns";
+import RagSources from "./rag-sources";
 import { parseApiError } from "@/utils/chat-api-client";
+import type { RagSource } from "@/types/types";
 
 const extensions = [
   StarterKit,
@@ -58,7 +60,8 @@ const ChatProvider: React.FC<{
   userPrompt: string;
   imgName?: string;
   imgInfo: { imgSrc: string; imgAlt: string };
-}> = ({ llmResponse, chatUniqueId, userPrompt, imgInfo, imgName }) => {
+  ragSources?: RagSource[];
+}> = ({ llmResponse, chatUniqueId, userPrompt, imgInfo, imgName, ragSources }) => {
   const { topLoader, setCurrChat, setTopLoader, currChat } = geminiZustand();
   const [dropdown, setDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -311,6 +314,8 @@ const ChatProvider: React.FC<{
         llmResponse={llmResponse}
         shareMsg={`user prompt: ${userPrompt} \n\n llm response:${handleTxtToSpeech()}`}
       />
+
+      <RagSources sources={ragSources} />
 
       {dropdown && createPortal(<DropdownContent />, document.body)}
     </>

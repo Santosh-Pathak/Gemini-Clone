@@ -10,6 +10,7 @@ export { doubleCheckSchema, rewriteRequestSchema } from "./schemas";
 export { streamChatReply, invokeChatWithImage } from "./chains/chat";
 export { rewriteResponse } from "./chains/rewrite";
 export { generateDoubleCheckQueries } from "./chains/double-check";
+export { retrieveRagContext } from "./chains/rag";
 export {
   prepareConversationMemory,
   estimateTokens,

@@ -27,7 +27,7 @@ export const createChat = async (
     const userId = await requireSessionUserId();
     assertSameUser(userId, chat.userID);
     await connectDB();
-    const { userPrompt, llmResponse, chatID, imgName } = chat;
+    const { userPrompt, llmResponse, chatID, imgName, ragSources } = chat;
     const prior = (await Chat.findOne({
       participant: userId,
       chatID,
@@ -42,7 +42,12 @@ export const createChat = async (
       chatID,
       threadSummary:
         typeof prior?.threadSummary === "string" ? prior.threadSummary : null,
-      message: { userPrompt, llmResponse, imgName },
+      message: {
+        userPrompt,
+        llmResponse,
+        imgName,
+        ragSources: ragSources?.length ? ragSources : null,
+      },
     });
     revalidatePath(`/app/${chatID}`);
     const serializedData = JSON.parse(JSON.stringify(data));

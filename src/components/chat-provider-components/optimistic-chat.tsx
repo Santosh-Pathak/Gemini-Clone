@@ -3,7 +3,6 @@
 import { MessageProps } from "@/types/types";
 import React, { useEffect, useOptimistic } from "react";
 import ChatProvider from "./chat-provider";
-import ChatActionsBtns from "./chat-actions-btns";
 import geminiZustand from "@/utils/gemini-zustand";
 
 const OptimisticChat = ({
@@ -19,7 +18,13 @@ const OptimisticChat = ({
     message,
     (state, newChat: MessageProps) => [...state, newChat]
   );
-  const { currChat, setPrevChat, setCurrChat, optimisticPrompt, optimisticResponse, inputImgName, setOptimisticResponse } = geminiZustand();
+  const {
+    optimisticPrompt,
+    optimisticResponse,
+    inputImgName,
+    optimisticRagSources,
+    setPrevChat,
+  } = geminiZustand();
 
   useEffect(() => {
     if (optimisticResponse) {
@@ -29,14 +34,22 @@ const OptimisticChat = ({
           imgName: inputImgName ?? undefined,
           userPrompt: optimisticPrompt ?? "",
           llmResponse: optimisticResponse ?? "",
+          ragSources: optimisticRagSources ?? undefined,
         },
       });
     }
-    // setCurrChat("userPrompt", null);
     if (message && message.length > 0) {
-      setPrevChat(message[message.length - 1].message)
+      setPrevChat(message[message.length - 1].message);
     }
-  }, [optimisticResponse, message]);
+  }, [
+    optimisticResponse,
+    optimisticRagSources,
+    message,
+    optimisticPrompt,
+    inputImgName,
+    addOptimisticChat,
+    setPrevChat,
+  ]);
 
   return (
     <>
@@ -48,6 +61,7 @@ const OptimisticChat = ({
             imgName={chat.message.imgName}
             llmResponse={chat.message.llmResponse}
             userPrompt={chat.message.userPrompt}
+            ragSources={chat.message.ragSources}
           />
         </div>
       ))}

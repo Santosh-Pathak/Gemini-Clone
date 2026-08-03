@@ -2,6 +2,7 @@ import {
   invokeChatWithImage,
   streamChatReply,
 } from "@/lib/ai/chains/chat";
+import { retrieveRagContext } from "@/lib/ai/chains/rag";
 import { contentToText, isGeminiModelId } from "@/lib/ai/llm";
 import { prepareConversationMemory } from "@/lib/ai/memory";
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
@@ -9,6 +10,10 @@ import {
   MAX_IMAGE_BASE64_LENGTH,
   MAX_PROMPT_LENGTH,
 } from "@/lib/ai/constants";
+import {
+  encodeRagSourcesHeader,
+  type RagSource,
+} from "@/lib/ai/rag/types";
 import {
   loadThreadMemory,
   updateThreadSummary,
@@ -24,6 +29,7 @@ type ChatRequestBody = {
   previousLlmResponse?: string | null;
   customPrompt?: string | null;
   model?: string;
+  useKnowledge?: boolean;
   image?: {
     data: string;
     mimeType: string;
@@ -44,6 +50,15 @@ function memoryHeaders(meta: {
   };
 }
 
+function ragHeaders(sources: RagSource[], enabled: boolean) {
+  return {
+    "X-RAG-Enabled": enabled ? "1" : "0",
+    ...(sources.length > 0
+      ? { "X-RAG-Sources": encodeRagSourcesHeader(sources) }
+      : {}),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const authResult = await requireAuthedUser("chat");
@@ -52,6 +67,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as ChatRequestBody;
     const message = body.message?.trim() ?? "";
     const chatID = body.chatID?.trim() || "";
+    const useKnowledge = Boolean(body.useKnowledge);
 
     if (!message) {
       return NextResponse.json(
@@ -98,7 +114,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Load full thread from DB (authoritative). Fall back to last-turn fields for safety.
     let turns: { userPrompt: string; llmResponse: string }[] = [];
     let existingSummary: string | null = null;
 
@@ -126,22 +141,38 @@ export async function POST(req: Request) {
       await updateThreadSummary(chatID, memory.summaryToPersist);
     }
 
+    let ragSources: RagSource[] = [];
+    let ragContext: string | null = null;
+
+    if (useKnowledge && !body.image?.data) {
+      const rag = await retrieveRagContext({
+        userId: authResult.userId,
+        query: message,
+      });
+      ragSources = rag.sources;
+      ragContext = rag.contextBlock || null;
+    }
+
     const chainInput = {
       userPrompt: message,
       customPrompt: body.customPrompt,
       model: body.model && isGeminiModelId(body.model) ? body.model : undefined,
       memory,
+      ragContext,
+      ragSources,
       image: body.image,
     };
 
-    const metaHeaders = memoryHeaders({
-      turnCount: memory.turnCount,
-      recentTurnCount: memory.recentTurnCount,
-      didSummarize: memory.didSummarize,
-      hasSummary: Boolean(memory.summary),
-    });
+    const metaHeaders = {
+      ...memoryHeaders({
+        turnCount: memory.turnCount,
+        recentTurnCount: memory.recentTurnCount,
+        didSummarize: memory.didSummarize,
+        hasSummary: Boolean(memory.summary),
+      }),
+      ...ragHeaders(ragSources, useKnowledge),
+    };
 
-    // Multimodal: non-streaming invoke
     if (body.image?.data) {
       const text = await invokeChatWithImage({
         ...chainInput,

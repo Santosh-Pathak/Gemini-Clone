@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { useMeasure } from "react-use";
 import { User } from "next-auth";
 import InputActions from "./input-actions";
+import KnowledgePanel from "./knowledge-panel";
 import Link from "next/link";
 import { MdImageSearch } from "react-icons/md";
 import { IoMdClose } from "react-icons/io";
@@ -14,6 +15,7 @@ import {
   fileToBase64Image,
   parseApiError,
   readMemoryHeaders,
+  readRagSourcesHeader,
   readTextStream,
 } from "@/utils/chat-api-client";
 
@@ -55,6 +57,10 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setSelectedModel,
     memoryHint,
     setMemoryHint,
+    useKnowledge,
+    setUseKnowledge,
+    setKnowledgeDocCount,
+    setOptimisticRagSources,
   } = geminiZustand();
   const [inputImg, setInputImg] = useState<File | null>(null);
 
@@ -81,6 +87,21 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setMemoryHint(null);
   }, [chat, setMemoryHint]);
 
+  useEffect(() => {
+    if (user) {
+      setUserData(user);
+      fetch("/api/rag/documents")
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            documents?: { id: string }[];
+          };
+          setKnowledgeDocCount(data.documents?.length ?? 0);
+        })
+        .catch(() => undefined);
+    }
+  }, [user, setUserData, setKnowledgeDocCount]);
+
   const generateMsg = useCallback(async () => {
     if (!currChat.userPrompt?.trim() || !user) return;
 
@@ -101,6 +122,8 @@ const InputPrompt = ({ user }: { user?: User }) => {
         imagePayload = await fileToBase64Image(inputImg);
       }
 
+      let ragSources: ReturnType<typeof readRagSourcesHeader> = [];
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,6 +133,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
           chatID,
           customPrompt: customPrompt.prompt,
           model: selectedModel,
+          useKnowledge: useKnowledge && !imagePayload,
           image: imagePayload,
         }),
       });
@@ -119,6 +143,8 @@ const InputPrompt = ({ user }: { user?: User }) => {
       }
 
       setMemoryHint(readMemoryHeaders(response));
+      ragSources = readRagSourcesHeader(response);
+      setOptimisticRagSources(ragSources.length > 0 ? ragSources : null);
 
       let text = await readTextStream(
         response,
@@ -148,6 +174,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
         imgName: rawImage ?? undefined,
         userPrompt: rawPrompt,
         llmResponse: text,
+        ragSources: ragSources.length > 0 ? ragSources : undefined,
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -167,6 +194,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
       if (!cancelledRef.current) {
         setOptimisticResponse(null);
         setOptimisticPrompt(null);
+        setOptimisticRagSources(null);
       }
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -178,12 +206,14 @@ const InputPrompt = ({ user }: { user?: User }) => {
     chatID,
     customPrompt.prompt,
     selectedModel,
+    useKnowledge,
     inputImg,
     inputImgName,
     setCurrChat,
     setMsgLoader,
     setOptimisticPrompt,
     setOptimisticResponse,
+    setOptimisticRagSources,
     setInputImgName,
     setToast,
     setMemoryHint,
@@ -219,12 +249,6 @@ const InputPrompt = ({ user }: { user?: User }) => {
     [generateMsg, user, setToast]
   );
 
-  useEffect(() => {
-    if (user) {
-      setUserData(user);
-    }
-  }, [user, setUserData]);
-
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target && event.target.files) {
       const file = event.target.files[0];
@@ -255,7 +279,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
           inputImgName && " !rounded-tl-none "
         } overflow-hidden bg-rtlLight dark:bg-rtlDark flex gap-1 md:items-center md:justify-between md:flex-row flex-col `}
       >
-        <div className="flex items-center gap-2 pl-4 pt-2 md:pt-0">
+        <div className="flex items-center gap-2 pl-4 pt-2 md:pt-0 flex-wrap">
           <label htmlFor="model-select" className="sr-only">
             Model
           </label>
@@ -269,6 +293,21 @@ const InputPrompt = ({ user }: { user?: User }) => {
             <option value="gemini-1.5-flash">Flash</option>
             <option value="gemini-1.5-pro">Pro</option>
           </select>
+          {user && (
+            <>
+              <label className="flex items-center gap-2 text-xs md:text-sm opacity-80 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={useKnowledge}
+                  disabled={msgLoader || Boolean(inputImgName)}
+                  onChange={(e) => setUseKnowledge(e.target.checked)}
+                  className="accent-accentBlue"
+                />
+                Knowledge
+              </label>
+              <KnowledgePanel disabled={msgLoader} />
+            </>
+          )}
         </div>
         <textarea
           name="prompt"
@@ -290,6 +329,11 @@ const InputPrompt = ({ user }: { user?: User }) => {
           generateMsg={generateMsg}
         />
       </div>
+      {useKnowledge && (
+        <p className="text-xs text-center text-accentBlue/70 max-w-4xl mx-auto">
+          Knowledge mode on — answers will cite your uploaded documents when relevant.
+        </p>
+      )}
       {memoryHint && (
         <p className="text-xs text-center text-accentBlue/80 max-w-4xl mx-auto">
           {formatMemoryHint(memoryHint)}

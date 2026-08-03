@@ -81,3 +81,30 @@ export function readMemoryHeaders(response: Response): MemoryResponseMeta {
     hasSummary: response.headers.get("X-Memory-Has-Summary") === "1",
   };
 }
+
+import type { RagSource } from "@/types/types";
+
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(
+    base64.length + ((4 - (base64.length % 4)) % 4),
+    "="
+  );
+  const binary =
+    typeof window !== "undefined"
+      ? atob(padded)
+      : Buffer.from(padded, "base64").toString("binary");
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+export function readRagSourcesHeader(response: Response): RagSource[] {
+  const encoded = response.headers.get("X-RAG-Sources");
+  if (!encoded) return [];
+  try {
+    const parsed = JSON.parse(decodeBase64Url(encoded));
+    return Array.isArray(parsed) ? (parsed as RagSource[]) : [];
+  } catch {
+    return [];
+  }
+}

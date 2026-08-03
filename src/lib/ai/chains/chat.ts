@@ -12,12 +12,15 @@ import {
   type PreparedMemory,
   type ThreadTurn,
 } from "../memory";
+import type { RagSource } from "../rag/types";
 
 export type ChatChainInput = {
   userPrompt: string;
   customPrompt?: string | null;
   model?: GeminiModelId;
   memory?: PreparedMemory;
+  ragContext?: string | null;
+  ragSources?: RagSource[];
   /** @deprecated Phase 3 uses full-thread memory from the server. */
   previousUserPrompt?: string | null;
   /** @deprecated Phase 3 uses full-thread memory from the server. */
@@ -55,6 +58,19 @@ function resolveMemory(input: ChatChainInput): PreparedMemory {
   return fallbackMemoryFromPrevious(input);
 }
 
+function buildRagAugmentedInstruction(
+  baseInstruction: string,
+  ragContext?: string | null
+): string {
+  if (!ragContext?.trim()) return baseInstruction;
+  return `${baseInstruction}
+
+---
+Document grounding mode is ON. Answer using the uploaded document excerpts below when relevant.
+
+${ragContext.trim()}`;
+}
+
 /**
  * Stream a text-only chat reply with multi-turn memory.
  */
@@ -66,8 +82,10 @@ export async function streamChatReply(input: ChatChainInput) {
 
   const memory = resolveMemory(input);
   const system = buildSystemMessage({
-    systemInstruction:
+    systemInstruction: buildRagAugmentedInstruction(
       input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
+      input.ragContext
+    ),
     summary: memory.summary,
   });
 
@@ -95,8 +113,10 @@ export async function invokeChatWithImage(
 
   const memory = resolveMemory(input);
   const system = buildSystemMessage({
-    systemInstruction:
+    systemInstruction: buildRagAugmentedInstruction(
       input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
+      input.ragContext
+    ),
     summary: memory.summary,
   });
 

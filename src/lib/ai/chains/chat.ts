@@ -1,17 +1,27 @@
 import { HumanMessage } from "@langchain/core/messages";
-import { contentToText, getChatModel, isGeminiModelId } from "../llm";
 import {
-  chatPromptTemplate,
-  DEFAULT_SYSTEM_INSTRUCTION,
-} from "../prompts";
+  contentToText,
+  getChatModel,
+  isGeminiModelId,
+} from "../llm";
+import { DEFAULT_SYSTEM_INSTRUCTION } from "../prompts";
 import type { GeminiModelId } from "../constants";
+import {
+  buildSystemMessage,
+  turnsToMessages,
+  type PreparedMemory,
+  type ThreadTurn,
+} from "../memory";
 
 export type ChatChainInput = {
   userPrompt: string;
-  previousUserPrompt?: string | null;
-  previousLlmResponse?: string | null;
   customPrompt?: string | null;
   model?: GeminiModelId;
+  memory?: PreparedMemory;
+  /** @deprecated Phase 3 uses full-thread memory from the server. */
+  previousUserPrompt?: string | null;
+  /** @deprecated Phase 3 uses full-thread memory from the server. */
+  previousLlmResponse?: string | null;
   image?: {
     data: string;
     mimeType: string;
@@ -22,8 +32,31 @@ function resolveModel(model?: string): GeminiModelId | undefined {
   return isGeminiModelId(model) ? model : undefined;
 }
 
+function fallbackMemoryFromPrevious(input: ChatChainInput): PreparedMemory {
+  const turns: ThreadTurn[] = [];
+  if (input.previousUserPrompt || input.previousLlmResponse) {
+    turns.push({
+      userPrompt: input.previousUserPrompt,
+      llmResponse: input.previousLlmResponse,
+    });
+  }
+  return {
+    history: turnsToMessages(turns),
+    summary: null,
+    turnCount: turns.length,
+    recentTurnCount: turns.length,
+    didSummarize: false,
+    summaryToPersist: null,
+  };
+}
+
+function resolveMemory(input: ChatChainInput): PreparedMemory {
+  if (input.memory) return input.memory;
+  return fallbackMemoryFromPrevious(input);
+}
+
 /**
- * Stream a text-only chat reply via LangChain LCEL.
+ * Stream a text-only chat reply with multi-turn memory.
  */
 export async function streamChatReply(input: ChatChainInput) {
   const model = getChatModel({
@@ -31,47 +64,45 @@ export async function streamChatReply(input: ChatChainInput) {
     streaming: true,
   });
 
-  const chain = chatPromptTemplate.pipe(model);
-
-  return chain.stream({
-    date: new Date().toISOString().split("T")[0],
+  const memory = resolveMemory(input);
+  const system = buildSystemMessage({
     systemInstruction:
       input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
-    previousUserPrompt: input.previousUserPrompt || "(none)",
-    previousLlmResponse: input.previousLlmResponse || "(none)",
-    userPrompt: input.userPrompt,
+    summary: memory.summary,
   });
+
+  const messages = [
+    system,
+    ...memory.history,
+    new HumanMessage(input.userPrompt),
+  ];
+
+  return model.stream(messages);
 }
 
 /**
- * Multimodal (image + text) reply — non-streaming for reliability.
+ * Multimodal (image + text) reply with multi-turn memory — non-streaming.
  */
-export async function invokeChatWithImage(input: ChatChainInput & {
-  image: { data: string; mimeType: string };
-}) {
+export async function invokeChatWithImage(
+  input: ChatChainInput & {
+    image: { data: string; mimeType: string };
+  }
+) {
   const model = getChatModel({
     model: resolveModel(input.model),
     streaming: false,
   });
 
-  const systemInstruction =
-    input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION;
-  const date = new Date().toISOString().split("T")[0];
+  const memory = resolveMemory(input);
+  const system = buildSystemMessage({
+    systemInstruction:
+      input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
+    summary: memory.summary,
+  });
 
-  const textBlock = `Date: ${date}
-
-${systemInstruction}
-
-Previous conversation turn:
-User: ${input.previousUserPrompt || "(none)"}
-Assistant: ${input.previousLlmResponse || "(none)"}
-
-Current user query:
-${input.userPrompt}`;
-
-  const message = new HumanMessage({
+  const human = new HumanMessage({
     content: [
-      { type: "text", text: textBlock },
+      { type: "text", text: input.userPrompt },
       {
         type: "image_url",
         image_url: `data:${input.image.mimeType};base64,${input.image.data}`,
@@ -79,6 +110,6 @@ ${input.userPrompt}`;
     ],
   });
 
-  const result = await model.invoke([message]);
+  const result = await model.invoke([system, ...memory.history, human]);
   return contentToText(result.content);
 }

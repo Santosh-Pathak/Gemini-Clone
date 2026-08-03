@@ -18,3 +18,12 @@ export type GeminiModelId = (typeof GEMINI_MODELS)[number];
 /** Sliding-window rate limit: max requests per user per window. */
 export const RATE_LIMIT_MAX_REQUESTS = 20;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Rough token budget for prior conversation context (excludes system + new user turn).
+ * ~4 chars/token heuristic — good enough for truncation decisions.
+ */
+export const MAX_HISTORY_TOKENS = 6_000;
+
+/** When summarizing, keep this many most-recent turns as raw messages. */
+export const RECENT_TURNS_TO_KEEP = 4;

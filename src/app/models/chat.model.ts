@@ -3,10 +3,15 @@ import { Schema, model, models } from "mongoose";
 const chatSchema = new Schema(
   {
     participant: { type: Schema.Types.ObjectId, ref: "User" },
-    
-    chatInfo: { icon: { type: String, default: null }, title: { type: String, default:null } },
+
+    chatInfo: {
+      icon: { type: String, default: null },
+      title: { type: String, default: null },
+    },
     isPinned: { type: Boolean, default: false },
     chatID: { type: String, required: [true, "Chat ID is required"] },
+    /** Running summary of older turns for long-thread memory (Phase 3). */
+    threadSummary: { type: String, default: null },
     message: {
       userPrompt: String,
       llmResponse: String,

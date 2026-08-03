@@ -28,9 +28,20 @@ export const createChat = async (
     assertSameUser(userId, chat.userID);
     await connectDB();
     const { userPrompt, llmResponse, chatID, imgName } = chat;
+    const prior = (await Chat.findOne({
+      participant: userId,
+      chatID,
+      threadSummary: { $nin: [null, ""] },
+    })
+      .sort({ createdAt: -1 })
+      .select("threadSummary")
+      .lean()) as { threadSummary?: string | null } | null;
+
     const data = await Chat.create({
       participant: userId,
       chatID,
+      threadSummary:
+        typeof prior?.threadSummary === "string" ? prior.threadSummary : null,
       message: { userPrompt, llmResponse, imgName },
     });
     revalidatePath(`/app/${chatID}`);
@@ -79,10 +90,79 @@ export const getChatHistory = async ({
     const data = await Chat.find({
       participant: new Types.ObjectId(sessionUserId),
       chatID: chatID,
-    });
+    }).sort({ createdAt: 1 });
     return { success: true, message: JSON.parse(JSON.stringify(data)) };
   } catch (error: any) {
     console.error("Error in getChatHistory:", error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Load ordered turns + latest threadSummary for multi-turn memory (Phase 3).
+ * Uses the authenticated session user — do not trust client-supplied history.
+ */
+export const loadThreadMemory = async (chatID: string) => {
+  try {
+    const userId = await requireSessionUserId();
+    await connectDB();
+    const data = await Chat.find({
+      participant: new Types.ObjectId(userId),
+      chatID,
+    }).sort({ createdAt: 1 });
+
+    const turns = data.map((doc) => ({
+      userPrompt: doc.message?.userPrompt ?? "",
+      llmResponse: doc.message?.llmResponse ?? "",
+    }));
+
+    let threadSummary: string | null = null;
+    for (let i = data.length - 1; i >= 0; i -= 1) {
+      const summary = data[i]?.threadSummary;
+      if (typeof summary === "string" && summary.trim()) {
+        threadSummary = summary.trim();
+        break;
+      }
+    }
+
+    return {
+      success: true as const,
+      turns,
+      threadSummary,
+      turnCount: turns.length,
+    };
+  } catch (error: any) {
+    console.error("Error in loadThreadMemory:", error);
+    return {
+      success: false as const,
+      turns: [] as { userPrompt: string; llmResponse: string }[],
+      threadSummary: null as string | null,
+      turnCount: 0,
+      message: error.message,
+    };
+  }
+};
+
+export const updateThreadSummary = async (
+  chatID: string,
+  threadSummary: string
+) => {
+  try {
+    const userId = await requireSessionUserId();
+    await connectDB();
+    const result = await Chat.updateMany(
+      {
+        participant: new Types.ObjectId(userId),
+        chatID,
+      },
+      { $set: { threadSummary } }
+    );
+    return {
+      success: true,
+      message: JSON.parse(JSON.stringify(result)),
+    };
+  } catch (error: any) {
+    console.error("Error in updateThreadSummary:", error);
     return { success: false, message: error.message };
   }
 };

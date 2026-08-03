@@ -65,3 +65,19 @@ export async function parseApiError(response: Response): Promise<string> {
   }
   return `Request failed (${response.status})`;
 }
+
+export type MemoryResponseMeta = {
+  turnCount: number;
+  recentTurnCount: number;
+  didSummarize: boolean;
+  hasSummary: boolean;
+};
+
+export function readMemoryHeaders(response: Response): MemoryResponseMeta {
+  return {
+    turnCount: Number(response.headers.get("X-Memory-Turns") || 0),
+    recentTurnCount: Number(response.headers.get("X-Memory-Recent") || 0),
+    didSummarize: response.headers.get("X-Memory-Summarized") === "1",
+    hasSummary: response.headers.get("X-Memory-Has-Summary") === "1",
+  };
+}

@@ -13,8 +13,29 @@ import { IoMdClose } from "react-icons/io";
 import {
   fileToBase64Image,
   parseApiError,
+  readMemoryHeaders,
   readTextStream,
 } from "@/utils/chat-api-client";
+
+function formatMemoryHint(hint: {
+  turnCount: number;
+  didSummarize: boolean;
+  hasSummary: boolean;
+}) {
+  if (hint.turnCount <= 0) {
+    return "Starting a new conversation";
+  }
+  const base = `Using full conversation context · ${hint.turnCount} prior turn${
+    hint.turnCount === 1 ? "" : "s"
+  }`;
+  if (hint.didSummarize) {
+    return `${base} · older turns summarized`;
+  }
+  if (hint.hasSummary) {
+    return `${base} · with running summary`;
+  }
+  return base;
+}
 
 const InputPrompt = ({ user }: { user?: User }) => {
   const {
@@ -25,7 +46,6 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setInputImgName,
     inputImgName,
     setMsgLoader,
-    prevChat,
     msgLoader,
     optimisticResponse,
     setUserData,
@@ -33,15 +53,33 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setOptimisticPrompt,
     selectedModel,
     setSelectedModel,
+    memoryHint,
+    setMemoryHint,
   } = geminiZustand();
   const [inputImg, setInputImg] = useState<File | null>(null);
 
   const { chat } = useParams();
   const router = useRouter();
   const [inputRref] = useMeasure<HTMLTextAreaElement>();
-  const chatID = (chat as string) || nanoid();
+  const newChatIdRef = useRef(nanoid());
+  const prevChatParamRef = useRef(chat);
+  const chatID =
+    typeof chat === "string" && chat.length > 0 ? chat : newChatIdRef.current;
   const abortRef = useRef<AbortController | null>(null);
   const cancelledRef = useRef(false);
+
+  // Navigating from /app/[chat] → /app starts a fresh thread id.
+  useEffect(() => {
+    const prev = prevChatParamRef.current;
+    const hadChat = typeof prev === "string" && prev.length > 0;
+    const hasChat = typeof chat === "string" && chat.length > 0;
+    prevChatParamRef.current = chat;
+
+    if (hadChat && !hasChat) {
+      newChatIdRef.current = nanoid();
+    }
+    setMemoryHint(null);
+  }, [chat, setMemoryHint]);
 
   const generateMsg = useCallback(async () => {
     if (!currChat.userPrompt?.trim() || !user) return;
@@ -69,8 +107,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
         signal: controller.signal,
         body: JSON.stringify({
           message: rawPrompt,
-          previousUserPrompt: prevChat.userPrompt,
-          previousLlmResponse: prevChat.llmResponse,
+          chatID,
           customPrompt: customPrompt.prompt,
           model: selectedModel,
           image: imagePayload,
@@ -80,6 +117,8 @@ const InputPrompt = ({ user }: { user?: User }) => {
       if (!response.ok) {
         throw new Error(await parseApiError(response));
       }
+
+      setMemoryHint(readMemoryHeaders(response));
 
       let text = await readTextStream(
         response,
@@ -125,7 +164,6 @@ const InputPrompt = ({ user }: { user?: User }) => {
       setInputImgName(null);
       setCurrChat("userPrompt", null);
       setCurrChat("llmResponse", null);
-      // Keep abort banner visible; clear optimistic only after a successful save path.
       if (!cancelledRef.current) {
         setOptimisticResponse(null);
         setOptimisticPrompt(null);
@@ -138,7 +176,6 @@ const InputPrompt = ({ user }: { user?: User }) => {
     currChat.userPrompt,
     user,
     chatID,
-    prevChat,
     customPrompt.prompt,
     selectedModel,
     inputImg,
@@ -149,6 +186,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setOptimisticResponse,
     setInputImgName,
     setToast,
+    setMemoryHint,
     router,
   ]);
 
@@ -252,6 +290,11 @@ const InputPrompt = ({ user }: { user?: User }) => {
           generateMsg={generateMsg}
         />
       </div>
+      {memoryHint && (
+        <p className="text-xs text-center text-accentBlue/80 max-w-4xl mx-auto">
+          {formatMemoryHint(memoryHint)}
+        </p>
+      )}
       <p className="text-xs font-light opacity-80 text-center">
         Gemini may display inaccurate info, including about people, so
         double-check its responses.{" "}

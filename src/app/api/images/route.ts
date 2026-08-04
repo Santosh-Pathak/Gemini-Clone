@@ -1,5 +1,6 @@
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
 import { MAX_IMAGE_BASE64_LENGTH } from "@/lib/ai/constants";
+import { assertFeatureEnabled } from "@/lib/feature-flags";
 import { uploadChatImage } from "@/lib/storage/chat-images";
 import { NextResponse } from "next/server";
 
@@ -9,6 +10,11 @@ const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 export async function POST(req: Request) {
   try {
+    const blocked = assertFeatureEnabled("vision", "Image uploads");
+    if (blocked.error) {
+      return NextResponse.json({ error: blocked.error }, { status: 403 });
+    }
+
     const authResult = await requireAuthedUser("images");
     if (authResult.error) return authResult.error;
 

@@ -15,11 +15,13 @@ const InputActions = ({
   handleCancel,
   handleImageUpload,
   canSubmit,
+  showImageUpload = true,
 }: {
   generateMsg: () => void;
   handleCancel: () => void;
   handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   canSubmit: boolean;
+  showImageUpload?: boolean;
 }) => {
   const { currChat, msgLoader } = geminiZustand();
   return (
@@ -40,6 +42,7 @@ const InputActions = ({
 
       )
         : (<>
+          {showImageUpload && (
           <ReactTooltip tipData="Upload image">
 
             <DevButton
@@ -58,7 +61,9 @@ const InputActions = ({
               <RiImageAddFill className="text-2xl text-black dark:text-white" />
             </DevButton>
           </ReactTooltip>
+          )}
 
+          {showImageUpload && (
           <ReactTooltip tipData="Upload photo">
 
             <DevButton
@@ -78,6 +83,7 @@ const InputActions = ({
               <SlCamera className="text-2xl text-black dark:text-white" />
             </DevButton>
           </ReactTooltip>
+          )}
 
           <SpeechToText />
 

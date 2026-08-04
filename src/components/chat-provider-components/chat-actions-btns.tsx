@@ -12,6 +12,7 @@ import geminiZustand from "@/utils/gemini-zustand";
 import { FcGoogle } from "react-icons/fc";
 import { IoMdSearch } from "react-icons/io";
 import { parseApiError } from "@/utils/chat-api-client";
+import { formatUserFacingAiError } from "@/lib/ai/format-ai-error";
 
 
 const ChatActionsBtns = ({
@@ -25,7 +26,7 @@ const ChatActionsBtns = ({
   userPrompt: string;
   shareMsg: string;
 }) => {
-  const { setToast } = geminiZustand();
+  const { setToast, setErrorToast } = geminiZustand();
   const [googleRes, setGoogleRes] = useState<string[] | null>(null)
   const [loader, setLoader] = useState(false)
 
@@ -55,11 +56,7 @@ const ChatActionsBtns = ({
       setGoogleRes(data.queries ?? [])
     } catch (error) {
       console.log(error)
-      setToast(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate search queries"
-      );
+      setErrorToast(formatUserFacingAiError(error));
     }
     finally {
       setLoader(false)

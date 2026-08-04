@@ -24,6 +24,8 @@ interface GeminiState {
   optimisticResponse: string | null;
   setOptimisticResponse: (optimisticResponse: string | null) => void;
   setToast: (toast: string | null) => void;
+  setErrorToast: (toast: string | null) => void;
+  toastIsError: boolean;
   devToast: string | null;
   inputImgName: string | null;
   setInputImgName: (inputImgName: string | null) => void;
@@ -59,9 +61,13 @@ interface GeminiState {
 const geminiZustand = create<GeminiState>()((set) => ({
   msgLoader: false,
   devToast: null,
+  toastIsError: false,
   prevChat: { userPrompt: "", llmResponse: "" },
   topLoader: false,
-  setToast: (value: string | null) => set({ devToast: value }),
+  setToast: (value: string | null) =>
+    set({ devToast: value, toastIsError: false }),
+  setErrorToast: (value: string | null) =>
+    set({ devToast: value, toastIsError: true }),
   userData: {},
   optimisticResponse: null,
   optimisticPrompt: null,

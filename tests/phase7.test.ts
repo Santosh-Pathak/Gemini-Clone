@@ -6,6 +6,8 @@ import { evaluateMathExpression } from "../src/lib/ai/tools/calculator";
 import { rateLimit } from "../src/lib/ai/rate-limit";
 import { hashUserId } from "../src/lib/ai/metrics/hash-user-id";
 import { scoreEvalResponse, type EvalCase } from "../evals/score-response";
+import { formatUserFacingAiError } from "../src/lib/ai/format-ai-error";
+import { assertFeatureEnabled, getFeatureFlags } from "../src/lib/feature-flags";
 
 test("splitIntoChunks returns non-empty chunks", async () => {
   const text = "alpha ".repeat(300).trim();
@@ -78,4 +80,20 @@ test("scoreEvalResponse applies rubric traits", () => {
   const fail = scoreEvalResponse(evalCase, "Nope.", 120);
   assert.equal(pass.passed, true);
   assert.equal(fail.passed, false);
+});
+
+test("formatUserFacingAiError maps common failures", () => {
+  assert.match(formatUserFacingAiError(new Error("Too many requests")), /quickly/i);
+  assert.match(
+    formatUserFacingAiError(new Error("Knowledge mode is disabled on this deployment.")),
+    /disabled/i
+  );
+});
+
+test("feature flags default to enabled and respect env overrides", () => {
+  const original = process.env.FEATURE_AGENT_ENABLED;
+  process.env.FEATURE_AGENT_ENABLED = "false";
+  assert.equal(getFeatureFlags().agent, false);
+  assert.equal(assertFeatureEnabled("agent", "Agent mode").error?.includes("disabled"), true);
+  process.env.FEATURE_AGENT_ENABLED = original;
 });

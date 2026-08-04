@@ -28,6 +28,7 @@ import {
   createStreamMetricTracker,
   resolveChatFeatureTag,
 } from "@/lib/ai/metrics/record-metric";
+import { assertFeatureEnabled, getFeatureFlags } from "@/lib/feature-flags";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -82,6 +83,28 @@ export async function POST(req: Request) {
     const chatID = body.chatID?.trim() || "";
     const useKnowledge = Boolean(body.useKnowledge);
     const mode = body.mode === "agent" ? "agent" : "chat";
+    const flags = getFeatureFlags();
+
+    if (mode === "agent") {
+      const blocked = assertFeatureEnabled("agent", "Agent mode");
+      if (blocked.error) {
+        return NextResponse.json({ error: blocked.error }, { status: 403 });
+      }
+    }
+
+    if (useKnowledge) {
+      const blocked = assertFeatureEnabled("rag", "Knowledge mode");
+      if (blocked.error) {
+        return NextResponse.json({ error: blocked.error }, { status: 403 });
+      }
+    }
+
+    if (body.image?.data || body.imageId?.trim()) {
+      const blocked = assertFeatureEnabled("vision", "Image uploads");
+      if (blocked.error) {
+        return NextResponse.json({ error: blocked.error }, { status: 403 });
+      }
+    }
 
     if (mode === "agent" && (body.image?.data || body.imageId)) {
       return NextResponse.json(

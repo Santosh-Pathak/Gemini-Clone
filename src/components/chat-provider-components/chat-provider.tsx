@@ -28,6 +28,7 @@ import ChatActionsBtns from "./chat-actions-btns";
 import RagSources from "./rag-sources";
 import AgentSteps from "./agent-steps";
 import { parseApiError } from "@/utils/chat-api-client";
+import { formatUserFacingAiError } from "@/lib/ai/format-ai-error";
 import type { RagSource, AgentStep } from "@/types/types";
 
 const extensions = [
@@ -74,7 +75,8 @@ const ChatProvider: React.FC<{
   ragSources,
   agentSteps,
 }) => {
-  const { topLoader, setCurrChat, setTopLoader, currChat } = geminiZustand();
+  const { topLoader, setCurrChat, setTopLoader, currChat, setErrorToast } =
+    geminiZustand();
   const [dropdown, setDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [initialResponse, setInitialResponse] = useState(llmResponse);
@@ -144,6 +146,7 @@ const ChatProvider: React.FC<{
       setDropdown(false);
     } catch (error) {
       console.error("Error generating response:", error);
+      setErrorToast(formatUserFacingAiError(error));
     } finally {
       setUpdateLoader(false);
     }

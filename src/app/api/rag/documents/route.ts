@@ -1,4 +1,5 @@
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
+import { assertFeatureEnabled } from "@/lib/feature-flags";
 import {
   deleteKnowledgeDocument,
   ingestKnowledgeDocument,
@@ -8,8 +9,18 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+function ragDisabledResponse() {
+  const blocked = assertFeatureEnabled("rag", "Knowledge mode");
+  if (blocked.error) {
+    return NextResponse.json({ error: blocked.error }, { status: 403 });
+  }
+  return null;
+}
+
 export async function GET() {
   try {
+    const disabled = ragDisabledResponse();
+    if (disabled) return disabled;
     const authResult = await requireAuthedUser("rag-list");
     if (authResult.error) return authResult.error;
 
@@ -29,6 +40,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const disabled = ragDisabledResponse();
+    if (disabled) return disabled;
     const authResult = await requireAuthedUser("rag-upload");
     if (authResult.error) return authResult.error;
 
@@ -62,6 +75,8 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const disabled = ragDisabledResponse();
+    if (disabled) return disabled;
     const authResult = await requireAuthedUser("rag-delete");
     if (authResult.error) return authResult.error;
 

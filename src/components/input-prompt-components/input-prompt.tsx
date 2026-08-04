@@ -22,6 +22,8 @@ import {
 import { readAgentStream } from "@/utils/agent-api-client";
 import type { AgentStep, VisionPresetId } from "@/types/types";
 import { VISION_PRESETS } from "@/lib/ai/vision-presets";
+import { formatUserFacingAiError } from "@/lib/ai/format-ai-error";
+import type { FeatureFlags } from "@/lib/feature-flags";
 
 function formatMemoryHint(hint: {
   turnCount: number;
@@ -43,11 +45,18 @@ function formatMemoryHint(hint: {
   return base;
 }
 
-const InputPrompt = ({ user }: { user?: User }) => {
+const InputPrompt = ({
+  user,
+  featureFlags,
+}: {
+  user?: User;
+  featureFlags: FeatureFlags;
+}) => {
   const {
     currChat,
     setCurrChat,
     setToast,
+    setErrorToast,
     customPrompt,
     setInputImgName,
     inputImgName,
@@ -101,7 +110,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
   }, [chat, setMemoryHint]);
 
   useEffect(() => {
-    if (user) {
+    if (user && featureFlags.rag) {
       setUserData(user);
       fetch("/api/rag/documents")
         .then(async (res) => {
@@ -112,8 +121,19 @@ const InputPrompt = ({ user }: { user?: User }) => {
           setKnowledgeDocCount(data.documents?.length ?? 0);
         })
         .catch(() => undefined);
+    } else if (user) {
+      setUserData(user);
     }
-  }, [user, setUserData, setKnowledgeDocCount]);
+  }, [user, featureFlags.rag, setUserData, setKnowledgeDocCount]);
+
+  useEffect(() => {
+    if (!featureFlags.agent && chatMode === "agent") {
+      setChatMode("chat");
+    }
+    if (!featureFlags.rag && useKnowledge) {
+      setUseKnowledge(false);
+    }
+  }, [featureFlags, chatMode, useKnowledge, setChatMode, setUseKnowledge]);
 
   useEffect(() => {
     if (!inputImg) {
@@ -259,9 +279,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
         return;
       }
       console.error("Error generating message:", error);
-      setToast(
-        error instanceof Error ? error.message : "Failed to generate response"
-      );
+      setErrorToast(formatUserFacingAiError(error));
     } finally {
       setMsgLoader(false);
       setInputImg(null);
@@ -303,7 +321,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
     setOptimisticAgentSteps,
     setLiveAgentSteps,
     setInputImgName,
-    setToast,
+    setErrorToast,
     setMemoryHint,
     router,
   ]);
@@ -428,7 +446,8 @@ const InputPrompt = ({ user }: { user?: User }) => {
             <option value="gemini-1.5-pro">Pro</option>
           </select>
           <div className="flex rounded-full border border-accentGray/30 p-0.5 text-xs md:text-sm">
-            {(["chat", "agent"] as const).map((mode) => (
+            {(["chat", ...(featureFlags.agent ? (["agent"] as const) : [])] as const).map(
+              (mode) => (
               <button
                 key={mode}
                 type="button"
@@ -444,7 +463,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
               </button>
             ))}
           </div>
-          {user && chatMode === "chat" && (
+          {user && chatMode === "chat" && featureFlags.rag && (
             <>
               <label className="flex items-center gap-2 text-xs md:text-sm opacity-80 cursor-pointer select-none">
                 <input
@@ -481,6 +500,7 @@ const InputPrompt = ({ user }: { user?: User }) => {
           canSubmit={Boolean(
             currChat.userPrompt?.trim() || (inputImgName && visionPreset)
           )}
+          showImageUpload={featureFlags.vision && chatMode === "chat"}
         />
       </div>
       {chatMode === "agent" && (

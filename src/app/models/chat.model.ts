@@ -16,7 +16,9 @@ const chatSchema = new Schema(
       userPrompt: String,
       llmResponse: String,
       imgName: { type: String, default: null },
+      imageId: { type: String, default: null },
       ragSources: { type: Array, default: null },
+      agentSteps: { type: Array, default: null },
     },
   },
   { timestamps: true }

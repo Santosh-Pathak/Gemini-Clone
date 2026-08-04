@@ -26,8 +26,9 @@ import ReactTooltip from "../dev-components/react-tooltip";
 import TextToSpeech from "./text-to-speech";
 import ChatActionsBtns from "./chat-actions-btns";
 import RagSources from "./rag-sources";
+import AgentSteps from "./agent-steps";
 import { parseApiError } from "@/utils/chat-api-client";
-import type { RagSource } from "@/types/types";
+import type { RagSource, AgentStep } from "@/types/types";
 
 const extensions = [
   StarterKit,
@@ -59,9 +60,20 @@ const ChatProvider: React.FC<{
   chatUniqueId: string;
   userPrompt: string;
   imgName?: string;
+  imageId?: string;
   imgInfo: { imgSrc: string; imgAlt: string };
   ragSources?: RagSource[];
-}> = ({ llmResponse, chatUniqueId, userPrompt, imgInfo, imgName, ragSources }) => {
+  agentSteps?: AgentStep[];
+}> = ({
+  llmResponse,
+  chatUniqueId,
+  userPrompt,
+  imgInfo,
+  imgName,
+  imageId,
+  ragSources,
+  agentSteps,
+}) => {
   const { topLoader, setCurrChat, setTopLoader, currChat } = geminiZustand();
   const [dropdown, setDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -267,13 +279,25 @@ const ChatProvider: React.FC<{
           </DevButton>
         </div>
       )}
-       {imgName &&
+       {(imgName || imageId) && (
         <div className="w-full mt-3 overflow-hidden ">
-          <div className="p-4 w-fit max-w-full bg-rtlLight dark:bg-rtlDark rounded-md flex items-start gap-2">
-            <MdOutlineImage className="text-4xl" />
-            <p className="text-lg truncate"> {imgName}</p></div>
+          <div className="p-4 w-fit max-w-full bg-rtlLight dark:bg-rtlDark rounded-md flex flex-col gap-3">
+            {imageId ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/images/${imageId}`}
+                alt={imgName || "Uploaded image"}
+                className="max-h-56 rounded-lg object-contain"
+              />
+            ) : (
+              <div className="flex items-start gap-2">
+                <MdOutlineImage className="text-4xl shrink-0" />
+                <p className="text-lg truncate">{imgName}</p>
+              </div>
+            )}
+          </div>
         </div>
-      }
+      )}
       <div className="w-full flex justify-end h-16 items-center">
         <TextToSpeech handleTxtToSpeech={handleTxtToSpeech} />
       </div>
@@ -316,6 +340,7 @@ const ChatProvider: React.FC<{
       />
 
       <RagSources sources={ragSources} />
+      <AgentSteps steps={agentSteps} />
 
       {dropdown && createPortal(<DropdownContent />, document.body)}
     </>

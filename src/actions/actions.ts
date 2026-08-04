@@ -21,13 +21,26 @@ function assertSameUser(sessionUserId: string, requestedUserId: string) {
 }
 
 export const createChat = async (
-  chat: Message & { userID: string; chatID: string; imgName?: string }
+  chat: Message & {
+    userID: string;
+    chatID: string;
+    imgName?: string;
+    imageId?: string;
+  }
 ) => {
   try {
     const userId = await requireSessionUserId();
     assertSameUser(userId, chat.userID);
     await connectDB();
-    const { userPrompt, llmResponse, chatID, imgName, ragSources } = chat;
+    const {
+      userPrompt,
+      llmResponse,
+      chatID,
+      imgName,
+      imageId,
+      ragSources,
+      agentSteps,
+    } = chat;
     const prior = (await Chat.findOne({
       participant: userId,
       chatID,
@@ -46,7 +59,9 @@ export const createChat = async (
         userPrompt,
         llmResponse,
         imgName,
+        imageId: imageId ?? null,
         ragSources: ragSources?.length ? ragSources : null,
+        agentSteps: agentSteps?.length ? agentSteps : null,
       },
     });
     revalidatePath(`/app/${chatID}`);

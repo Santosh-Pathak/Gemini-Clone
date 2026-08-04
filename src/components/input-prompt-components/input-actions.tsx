@@ -13,18 +13,20 @@ import ReactTooltip from "../dev-components/react-tooltip";
 const InputActions = ({
   generateMsg,
   handleCancel,
-  handleImageUpload
+  handleImageUpload,
+  canSubmit,
 }: {
   generateMsg: () => void;
   handleCancel: () => void;
-  handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  canSubmit: boolean;
 }) => {
   const { currChat, msgLoader } = geminiZustand();
   return (
     <div
       className={`flex justify-end items-center`}
     >
-      {currChat.userPrompt && msgLoader ? (
+      {msgLoader ? (
         <ReactTooltip tipData="Stop response">
           <DevButton
             onClick={handleCancel}
@@ -87,7 +89,7 @@ const InputActions = ({
               type="submit"
               rounded="full"
               variant="v3"
-              className={`overflow-hidden transform origin-right p-2 ${currChat.userPrompt && !msgLoader
+              className={`overflow-hidden transform origin-right p-2 ${canSubmit && !msgLoader
                 ? "*:w-8 *:scale-100 pointer-events-auto  ml-2"
                 : "*:w-0 *:scale-0 pointer-events-none"
                 }`}

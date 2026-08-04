@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import { Message, RagSource } from "../types/types";
+import { AgentStep, ChatMode, Message, RagSource, VisionPresetId } from "../types/types";
 import { User } from "next-auth";
 
 export type MemoryHint = {
@@ -44,6 +44,16 @@ interface GeminiState {
   setKnowledgeDocCount: (count: number) => void;
   optimisticRagSources: RagSource[] | null;
   setOptimisticRagSources: (sources: RagSource[] | null) => void;
+  chatMode: ChatMode;
+  setChatMode: (mode: ChatMode) => void;
+  optimisticAgentSteps: AgentStep[] | null;
+  setOptimisticAgentSteps: (steps: AgentStep[] | null) => void;
+  liveAgentSteps: AgentStep[];
+  setLiveAgentSteps: (steps: AgentStep[]) => void;
+  visionPreset: VisionPresetId | null;
+  setVisionPreset: (preset: VisionPresetId | null) => void;
+  inputImageId: string | null;
+  setInputImageId: (imageId: string | null) => void;
 }
 
 const geminiZustand = create<GeminiState>()((set) => ({
@@ -68,6 +78,17 @@ const geminiZustand = create<GeminiState>()((set) => ({
   setKnowledgeDocCount: (knowledgeDocCount) => set({ knowledgeDocCount }),
   optimisticRagSources: null,
   setOptimisticRagSources: (optimisticRagSources) => set({ optimisticRagSources }),
+  chatMode: "chat",
+  setChatMode: (chatMode) => set({ chatMode }),
+  optimisticAgentSteps: null,
+  setOptimisticAgentSteps: (optimisticAgentSteps) =>
+    set({ optimisticAgentSteps }),
+  liveAgentSteps: [],
+  setLiveAgentSteps: (liveAgentSteps) => set({ liveAgentSteps }),
+  visionPreset: null,
+  setVisionPreset: (visionPreset) => set({ visionPreset }),
+  inputImageId: null,
+  setInputImageId: (inputImageId) => set({ inputImageId }),
   setOptimisticPrompt: (value: string | null) =>
     set({ optimisticPrompt: value }),
   setInputImgName: (value: string | null) => set({ inputImgName: value }),

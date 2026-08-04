@@ -22,7 +22,9 @@ const OptimisticChat = ({
     optimisticPrompt,
     optimisticResponse,
     inputImgName,
+    inputImageId,
     optimisticRagSources,
+    optimisticAgentSteps,
     setPrevChat,
   } = geminiZustand();
 
@@ -32,9 +34,11 @@ const OptimisticChat = ({
         _id: Date.now().toString(),
         message: {
           imgName: inputImgName ?? undefined,
+          imageId: inputImageId ?? undefined,
           userPrompt: optimisticPrompt ?? "",
           llmResponse: optimisticResponse ?? "",
           ragSources: optimisticRagSources ?? undefined,
+          agentSteps: optimisticAgentSteps ?? undefined,
         },
       });
     }
@@ -44,9 +48,11 @@ const OptimisticChat = ({
   }, [
     optimisticResponse,
     optimisticRagSources,
+    optimisticAgentSteps,
     message,
     optimisticPrompt,
     inputImgName,
+    inputImageId,
     addOptimisticChat,
     setPrevChat,
   ]);
@@ -59,9 +65,11 @@ const OptimisticChat = ({
             chatUniqueId={chat._id}
             imgInfo={{ imgSrc: image, imgAlt: name }}
             imgName={chat.message.imgName}
+            imageId={chat.message.imageId}
             llmResponse={chat.message.llmResponse}
             userPrompt={chat.message.userPrompt}
             ragSources={chat.message.ragSources}
+            agentSteps={chat.message.agentSteps}
           />
         </div>
       ))}

@@ -1,5 +1,5 @@
 import {
-  invokeChatWithImage,
+  streamChatWithImage,
   streamChatReply,
 } from "@/lib/ai/chains/chat";
 import { retrieveRagContext } from "@/lib/ai/chains/rag";
@@ -18,6 +18,12 @@ import {
   loadThreadMemory,
   updateThreadSummary,
 } from "@/actions/actions";
+import { runAgentStream } from "@/lib/ai/agents/run-agent";
+import { isVisionPresetId } from "@/lib/ai/vision-presets";
+import {
+  getChatImageBase64,
+  uploadChatImage,
+} from "@/lib/storage/chat-images";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -30,6 +36,9 @@ type ChatRequestBody = {
   customPrompt?: string | null;
   model?: string;
   useKnowledge?: boolean;
+  mode?: "chat" | "agent";
+  visionPreset?: string | null;
+  imageId?: string | null;
   image?: {
     data: string;
     mimeType: string;
@@ -68,10 +77,18 @@ export async function POST(req: Request) {
     const message = body.message?.trim() ?? "";
     const chatID = body.chatID?.trim() || "";
     const useKnowledge = Boolean(body.useKnowledge);
+    const mode = body.mode === "agent" ? "agent" : "chat";
 
-    if (!message) {
+    if (mode === "agent" && (body.image?.data || body.imageId)) {
       return NextResponse.json(
-        { error: "Message is required." },
+        { error: "Agent mode does not support image prompts." },
+        { status: 400 }
+      );
+    }
+
+    if (!message && !body.image?.data && !body.imageId?.trim()) {
+      return NextResponse.json(
+        { error: "Message or image is required." },
         { status: 400 }
       );
     }
@@ -99,6 +116,16 @@ export async function POST(req: Request) {
       );
     }
 
+    if (body.visionPreset && !isVisionPresetId(body.visionPreset)) {
+      return NextResponse.json(
+        { error: "Unsupported vision preset." },
+        { status: 400 }
+      );
+    }
+
+    let resolvedImage: { data: string; mimeType: string } | null = null;
+    let persistedImageId: string | null = body.imageId?.trim() || null;
+
     if (body.image?.data) {
       if (body.image.data.length > MAX_IMAGE_BASE64_LENGTH) {
         return NextResponse.json(
@@ -112,6 +139,26 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
+      resolvedImage = body.image;
+    } else if (persistedImageId) {
+      try {
+        resolvedImage = await getChatImageBase64(
+          persistedImageId,
+          authResult.userId
+        );
+      } catch {
+        return NextResponse.json({ error: "Image not found." }, { status: 404 });
+      }
+    }
+
+    if (body.image?.data && !persistedImageId) {
+      const buffer = Buffer.from(body.image.data, "base64");
+      persistedImageId = await uploadChatImage({
+        userId: authResult.userId,
+        buffer,
+        filename: "chat-upload.png",
+        mimeType: body.image.mimeType,
+      });
     }
 
     let turns: { userPrompt: string; llmResponse: string }[] = [];
@@ -144,7 +191,7 @@ export async function POST(req: Request) {
     let ragSources: RagSource[] = [];
     let ragContext: string | null = null;
 
-    if (useKnowledge && !body.image?.data) {
+    if (useKnowledge && !resolvedImage && mode === "chat") {
       const rag = await retrieveRagContext({
         userId: authResult.userId,
         query: message,
@@ -153,6 +200,11 @@ export async function POST(req: Request) {
       ragContext = rag.contextBlock || null;
     }
 
+    const visionPreset =
+      body.visionPreset && isVisionPresetId(body.visionPreset)
+        ? body.visionPreset
+        : null;
+
     const chainInput = {
       userPrompt: message,
       customPrompt: body.customPrompt,
@@ -160,8 +212,13 @@ export async function POST(req: Request) {
       memory,
       ragContext,
       ragSources,
-      image: body.image,
+      visionPreset,
+      image: resolvedImage,
     };
+
+    const imageHeaders = persistedImageId
+      ? { "X-Image-Id": persistedImageId }
+      : {};
 
     const metaHeaders = {
       ...memoryHeaders({
@@ -170,20 +227,101 @@ export async function POST(req: Request) {
         didSummarize: memory.didSummarize,
         hasSummary: Boolean(memory.summary),
       }),
-      ...ragHeaders(ragSources, useKnowledge),
+      ...ragHeaders(ragSources, useKnowledge && mode === "chat"),
+      ...imageHeaders,
+      "X-Chat-Mode": mode,
     };
 
-    if (body.image?.data) {
-      const text = await invokeChatWithImage({
-        ...chainInput,
-        image: body.image,
+    if (mode === "agent") {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const event of runAgentStream({
+              userId: authResult.userId,
+              userPrompt: message,
+              memory,
+              model:
+                body.model && isGeminiModelId(body.model)
+                  ? body.model
+                  : undefined,
+            })) {
+              if (req.signal.aborted) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(
+                encoder.encode(`${JSON.stringify(event)}\n`)
+              );
+            }
+            controller.close();
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Agent failed";
+            controller.enqueue(
+              encoder.encode(
+                `${JSON.stringify({ type: "error", message })}\n`
+              )
+            );
+            controller.close();
+          }
+        },
+        cancel() {
+          // Client aborted via AbortController.
+        },
       });
 
-      return new Response(text, {
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          ...metaHeaders,
+        },
+      });
+    }
+
+    if (resolvedImage) {
+      const lcStream = await streamChatWithImage({
+        ...chainInput,
+        image: resolvedImage,
+      });
+      const encoder = new TextEncoder();
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of lcStream) {
+              if (req.signal.aborted) {
+                controller.close();
+                return;
+              }
+              const chunkText = contentToText(chunk.content);
+              if (chunkText) {
+                controller.enqueue(encoder.encode(chunkText));
+              }
+            }
+            controller.close();
+          } catch (error) {
+            if (req.signal.aborted) {
+              controller.close();
+              return;
+            }
+            controller.error(error);
+          }
+        },
+        cancel() {
+          // Client aborted via AbortController.
+        },
+      });
+
+      return new Response(stream, {
         status: 200,
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
           "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
           ...metaHeaders,
         },
       });

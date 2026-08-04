@@ -108,3 +108,7 @@ export function readRagSourcesHeader(response: Response): RagSource[] {
     return [];
   }
 }
+
+export function readImageIdHeader(response: Response): string | null {
+  return response.headers.get("X-Image-Id");
+}

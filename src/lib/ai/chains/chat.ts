@@ -13,6 +13,11 @@ import {
   type ThreadTurn,
 } from "../memory";
 import type { RagSource } from "../rag/types";
+import {
+  buildVisionUserPrompt,
+  resolveVisionPreset,
+  type VisionPresetId,
+} from "../vision-presets";
 
 export type ChatChainInput = {
   userPrompt: string;
@@ -21,6 +26,7 @@ export type ChatChainInput = {
   memory?: PreparedMemory;
   ragContext?: string | null;
   ragSources?: RagSource[];
+  visionPreset?: VisionPresetId | null;
   /** @deprecated Phase 3 uses full-thread memory from the server. */
   previousUserPrompt?: string | null;
   /** @deprecated Phase 3 uses full-thread memory from the server. */
@@ -98,8 +104,56 @@ export async function streamChatReply(input: ChatChainInput) {
   return model.stream(messages);
 }
 
+function buildMultimodalHumanMessage(
+  input: ChatChainInput & { image: { data: string; mimeType: string } }
+) {
+  const preset = resolveVisionPreset(input.visionPreset);
+  const prompt = buildVisionUserPrompt(input.userPrompt, preset);
+
+  return new HumanMessage({
+    content: [
+      { type: "text", text: prompt },
+      {
+        type: "image_url",
+        image_url: `data:${input.image.mimeType};base64,${input.image.data}`,
+      },
+    ],
+  });
+}
+
+function buildMultimodalMessages(
+  input: ChatChainInput & { image: { data: string; mimeType: string } }
+) {
+  const memory = resolveMemory(input);
+  const system = buildSystemMessage({
+    systemInstruction: buildRagAugmentedInstruction(
+      input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
+      input.ragContext
+    ),
+    summary: memory.summary,
+  });
+
+  return [system, ...memory.history, buildMultimodalHumanMessage(input)];
+}
+
 /**
- * Multimodal (image + text) reply with multi-turn memory — non-streaming.
+ * Stream a multimodal (image + text) reply with multi-turn memory.
+ */
+export async function streamChatWithImage(
+  input: ChatChainInput & {
+    image: { data: string; mimeType: string };
+  }
+) {
+  const model = getChatModel({
+    model: resolveModel(input.model),
+    streaming: true,
+  });
+
+  return model.stream(buildMultimodalMessages(input));
+}
+
+/**
+ * Multimodal (image + text) reply with multi-turn memory — non-streaming fallback.
  */
 export async function invokeChatWithImage(
   input: ChatChainInput & {
@@ -111,25 +165,6 @@ export async function invokeChatWithImage(
     streaming: false,
   });
 
-  const memory = resolveMemory(input);
-  const system = buildSystemMessage({
-    systemInstruction: buildRagAugmentedInstruction(
-      input.customPrompt?.trim() || DEFAULT_SYSTEM_INSTRUCTION,
-      input.ragContext
-    ),
-    summary: memory.summary,
-  });
-
-  const human = new HumanMessage({
-    content: [
-      { type: "text", text: input.userPrompt },
-      {
-        type: "image_url",
-        image_url: `data:${input.image.mimeType};base64,${input.image.data}`,
-      },
-    ],
-  });
-
-  const result = await model.invoke([system, ...memory.history, human]);
+  const result = await model.invoke(buildMultimodalMessages(input));
   return contentToText(result.content);
 }

@@ -2,6 +2,10 @@ import { rewriteResponse } from "@/lib/ai/chains/rewrite";
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
 import { MAX_PROMPT_LENGTH } from "@/lib/ai/constants";
 import { rewriteRequestSchema } from "@/lib/ai/schemas";
+import {
+  createRequestTimer,
+  recordRequestMetric,
+} from "@/lib/ai/metrics/record-metric";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -50,21 +54,51 @@ export async function POST(req: Request) {
       }
     }
 
-    const text = await rewriteResponse({
-      fullResponse,
-      selectedText,
-      promptType,
-      customInstruction,
-    });
+    const timer = createRequestTimer();
+    const inputChars = fullResponse.length + selectedText.length;
 
-    if (!text) {
-      return NextResponse.json(
-        { error: "Empty response from model." },
-        { status: 502 }
-      );
+    try {
+      const text = await rewriteResponse({
+        fullResponse,
+        selectedText,
+        promptType,
+        customInstruction,
+      });
+
+      if (!text) {
+        recordRequestMetric({
+          userId: authResult.userId,
+          feature: "rewrite",
+          latencyMs: timer.elapsedMs(),
+          inputChars,
+          status: "error",
+        });
+        return NextResponse.json(
+          { error: "Empty response from model." },
+          { status: 502 }
+        );
+      }
+
+      recordRequestMetric({
+        userId: authResult.userId,
+        feature: "rewrite",
+        latencyMs: timer.elapsedMs(),
+        inputChars,
+        outputChars: text.length,
+        status: "ok",
+      });
+
+      return NextResponse.json({ text });
+    } catch (error) {
+      recordRequestMetric({
+        userId: authResult.userId,
+        feature: "rewrite",
+        latencyMs: timer.elapsedMs(),
+        inputChars,
+        status: "error",
+      });
+      throw error;
     }
-
-    return NextResponse.json({ text });
   } catch (error) {
     console.error("[api/chat/rewrite]", error);
     const message =

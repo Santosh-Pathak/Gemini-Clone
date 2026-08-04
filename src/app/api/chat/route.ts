@@ -24,6 +24,10 @@ import {
   getChatImageBase64,
   uploadChatImage,
 } from "@/lib/storage/chat-images";
+import {
+  createStreamMetricTracker,
+  resolveChatFeatureTag,
+} from "@/lib/ai/metrics/record-metric";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -232,30 +236,61 @@ export async function POST(req: Request) {
       "X-Chat-Mode": mode,
     };
 
+    const modelId =
+      body.model && isGeminiModelId(body.model) ? body.model : undefined;
+    const featureTag = resolveChatFeatureTag({
+      mode,
+      useKnowledge,
+      hasImage: Boolean(resolvedImage),
+    });
+    const inputChars = message.length;
+
     if (mode === "agent") {
+      const tracker = createStreamMetricTracker({
+        userId: authResult.userId,
+        feature: featureTag,
+        model: modelId ?? null,
+        inputChars,
+      });
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         async start(controller) {
+          let finished = false;
+          const finishOnce = (status: "ok" | "error" | "aborted") => {
+            if (finished) return;
+            finished = true;
+            tracker.finish(status);
+          };
+
           try {
             for await (const event of runAgentStream({
               userId: authResult.userId,
               userPrompt: message,
               memory,
-              model:
-                body.model && isGeminiModelId(body.model)
-                  ? body.model
-                  : undefined,
+              model: modelId,
             })) {
               if (req.signal.aborted) {
+                finishOnce("aborted");
                 controller.close();
                 return;
+              }
+              if (event.type === "text") {
+                tracker.addOutput(event.delta);
               }
               controller.enqueue(
                 encoder.encode(`${JSON.stringify(event)}\n`)
               );
+              if (event.type === "done") {
+                finishOnce("ok");
+              }
+              if (event.type === "error") {
+                finishOnce("error");
+              }
             }
+            finishOnce("ok");
             controller.close();
           } catch (error) {
+            finishOnce("error");
             const message =
               error instanceof Error ? error.message : "Agent failed";
             controller.enqueue(
@@ -267,7 +302,7 @@ export async function POST(req: Request) {
           }
         },
         cancel() {
-          // Client aborted via AbortController.
+          tracker.finish("aborted");
         },
       });
 
@@ -283,6 +318,12 @@ export async function POST(req: Request) {
     }
 
     if (resolvedImage) {
+      const tracker = createStreamMetricTracker({
+        userId: authResult.userId,
+        feature: featureTag,
+        model: modelId ?? null,
+        inputChars,
+      });
       const lcStream = await streamChatWithImage({
         ...chainInput,
         image: resolvedImage,
@@ -294,16 +335,20 @@ export async function POST(req: Request) {
           try {
             for await (const chunk of lcStream) {
               if (req.signal.aborted) {
+                tracker.finish("aborted");
                 controller.close();
                 return;
               }
               const chunkText = contentToText(chunk.content);
               if (chunkText) {
+                tracker.addOutput(chunkText);
                 controller.enqueue(encoder.encode(chunkText));
               }
             }
+            tracker.finish("ok");
             controller.close();
           } catch (error) {
+            tracker.finish("error");
             if (req.signal.aborted) {
               controller.close();
               return;
@@ -312,7 +357,7 @@ export async function POST(req: Request) {
           }
         },
         cancel() {
-          // Client aborted via AbortController.
+          tracker.finish("aborted");
         },
       });
 
@@ -327,6 +372,12 @@ export async function POST(req: Request) {
       });
     }
 
+    const tracker = createStreamMetricTracker({
+      userId: authResult.userId,
+      feature: featureTag,
+      model: modelId ?? null,
+      inputChars,
+    });
     const lcStream = await streamChatReply(chainInput);
     const encoder = new TextEncoder();
 
@@ -335,16 +386,20 @@ export async function POST(req: Request) {
         try {
           for await (const chunk of lcStream) {
             if (req.signal.aborted) {
+              tracker.finish("aborted");
               controller.close();
               return;
             }
             const chunkText = contentToText(chunk.content);
             if (chunkText) {
+              tracker.addOutput(chunkText);
               controller.enqueue(encoder.encode(chunkText));
             }
           }
+          tracker.finish("ok");
           controller.close();
         } catch (error) {
+          tracker.finish("error");
           if (req.signal.aborted) {
             controller.close();
             return;
@@ -353,7 +408,7 @@ export async function POST(req: Request) {
         }
       },
       cancel() {
-        // Client aborted via AbortController.
+        tracker.finish("aborted");
       },
     });
 

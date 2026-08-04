@@ -1,6 +1,10 @@
 import { generateDoubleCheckQueries } from "@/lib/ai/chains/double-check";
 import { requireAuthedUser } from "@/lib/ai/require-authed-user";
 import { MAX_PROMPT_LENGTH } from "@/lib/ai/constants";
+import {
+  createRequestTimer,
+  recordRequestMetric,
+} from "@/lib/ai/metrics/record-metric";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -31,9 +35,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const { queries } = await generateDoubleCheckQueries({ userPrompt });
+    const timer = createRequestTimer();
 
-    return NextResponse.json({ queries });
+    try {
+      const { queries } = await generateDoubleCheckQueries({ userPrompt });
+
+      recordRequestMetric({
+        userId: authResult.userId,
+        feature: "double-check",
+        latencyMs: timer.elapsedMs(),
+        inputChars: userPrompt.length,
+        outputChars: queries.join(" ").length,
+        status: "ok",
+      });
+
+      return NextResponse.json({ queries });
+    } catch (error) {
+      recordRequestMetric({
+        userId: authResult.userId,
+        feature: "double-check",
+        latencyMs: timer.elapsedMs(),
+        inputChars: userPrompt.length,
+        status: "error",
+      });
+      throw error;
+    }
   } catch (error) {
     console.error("[api/chat/double-check]", error);
     const message =

@@ -1,20 +1,18 @@
-'use client'
-import { NodeViewWrapper } from '@tiptap/react'
-import React from 'react'
+"use client";
+import { NodeViewWrapper } from "@tiptap/react";
+import React from "react";
 import root from "react-shadow/styled-components";
-import { FormatOutput } from '@/utils/shadow';
+import { FormatOutput } from "@/utils/shadow";
 
-
-export default (props:any) => {
+function DemoComponent(props: { node: { attrs: { count?: string } } }) {
   return (
     <NodeViewWrapper className="react-component">
       <label>React Component</label>
-      <root.div className='content'>
-                <FormatOutput>
-                    {props.node.attrs.count}
-                </FormatOutput>
-            </root.div>
-    
+      <root.div className="content">
+        <FormatOutput>{props.node.attrs.count}</FormatOutput>
+      </root.div>
     </NodeViewWrapper>
-  )
+  );
 }
+
+export default DemoComponent;

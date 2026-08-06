@@ -11,7 +11,6 @@ import {
   IoSettingsOutline,
 } from "react-icons/io5";
 import ReactTooltip from "../dev-components/react-tooltip";
-import { GoDotFill } from "react-icons/go";
 import DevPopover from "../dev-components/dev-popover";
 import ThemeSwitch from "./theme-switch";
 import { useParams, useRouter } from "next/navigation";
@@ -21,8 +20,18 @@ import { createPortal } from "react-dom";
 import GeminiLogo from "../header-components/gemini-logo";
 import { SiGooglegemini } from "react-icons/si";
 import { LuGalleryHorizontalEnd } from "react-icons/lu";
+import { MdOutlineInsights } from "react-icons/md";
+import AppOriginLabel from "./app-origin-label";
 
-const SideBar = ({ user, sidebarList }: { user?: User; sidebarList: any }) => {
+const SideBar = ({
+  user,
+  sidebarList,
+  showMetrics,
+}: {
+  user?: User;
+  sidebarList: any;
+  showMetrics?: boolean;
+}) => {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { chat } = useParams()
@@ -130,6 +139,17 @@ const SideBar = ({ user, sidebarList }: { user?: User; sidebarList: any }) => {
                     <LuGalleryHorizontalEnd className="text-xl" />
                     Prompt gallery
                   </DevButton>
+                  {showMetrics && (
+                    <DevButton
+                      variant="v3"
+                      href="/app/metrics"
+                      className="w-full !justify-start gap-3 group"
+                      rounded="none"
+                    >
+                      <MdOutlineInsights className="text-xl" />
+                      Request metrics
+                    </DevButton>
+                  )}
                   {/* <DevButton
                     variant="v3"
                     className="w-full !justify-start gap-3  group "
@@ -164,13 +184,7 @@ const SideBar = ({ user, sidebarList }: { user?: User; sidebarList: any }) => {
         <div
           className={`transform overflow-hidden ${open ? "block" : "hidden"}`}
         >
-          <span className="flex items-center text-xs gap-2 ml-3 mt-5">
-            <GoDotFill />
-            <p>http://localhost:3000</p>
-          </span>
-          <span className="text-xs text-nowrap cursor-pointer text-blue-400 ml-3">
-            From your Dev IP address . Update location
-          </span>
+          <AppOriginLabel />
         </div>
       </div>
     </section>

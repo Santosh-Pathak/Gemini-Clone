@@ -8,9 +8,10 @@ import { IoTrashOutline } from "react-icons/io5";
 import geminiZustand from "@/utils/gemini-zustand";
 import type { KnowledgeDocumentSummary } from "@/types/types";
 import { parseApiError } from "@/utils/chat-api-client";
+import { formatUserFacingAiError } from "@/lib/ai/format-ai-error";
 
 const KnowledgePanel = ({ disabled }: { disabled?: boolean }) => {
-  const { setToast, setKnowledgeDocCount } = geminiZustand();
+  const { setToast, setErrorToast, setKnowledgeDocCount } = geminiZustand();
   const [open, setOpen] = useState(false);
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,13 +29,11 @@ const KnowledgePanel = ({ disabled }: { disabled?: boolean }) => {
       setDocuments(docs);
       setKnowledgeDocCount(docs.length);
     } catch (error) {
-      setToast(
-        error instanceof Error ? error.message : "Failed to load documents"
-      );
+      setErrorToast(formatUserFacingAiError(error));
     } finally {
       setLoading(false);
     }
-  }, [setToast, setKnowledgeDocCount]);
+  }, [setErrorToast, setKnowledgeDocCount]);
 
   useEffect(() => {
     if (open) fetchDocuments();
@@ -57,9 +56,7 @@ const KnowledgePanel = ({ disabled }: { disabled?: boolean }) => {
       setToast(`Indexed ${file.name}`);
       await fetchDocuments();
     } catch (error) {
-      setToast(
-        error instanceof Error ? error.message : "Failed to upload document"
-      );
+      setErrorToast(formatUserFacingAiError(error));
     } finally {
       setUploading(false);
     }
@@ -74,9 +71,7 @@ const KnowledgePanel = ({ disabled }: { disabled?: boolean }) => {
       setToast("Document removed");
       await fetchDocuments();
     } catch (error) {
-      setToast(
-        error instanceof Error ? error.message : "Failed to delete document"
-      );
+      setErrorToast(formatUserFacingAiError(error));
     }
   };
 

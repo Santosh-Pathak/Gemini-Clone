@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+out
+.git
+.gitignore
+.vscode
+.DS_Store
+*.log
+coverage
+npm-debug.log*
+.env
+.env.*
+!.env.sample
+Dockerfile*
+docker-compose*.yml

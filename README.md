@@ -2,109 +2,156 @@
 
 [![CI](https://github.com/Santosh-Pathak/Gemini-Clone/actions/workflows/ci.yml/badge.svg)](https://github.com/Santosh-Pathak/Gemini-Clone/actions/workflows/ci.yml)
 
-A full-stack Gemini-style chat app built with **Next.js 14**, **LangChain.js**, **Google Gemini**, and **MongoDB**. Supports streaming chat, multi-turn memory, RAG with citations, tool-using agents, multimodal vision, request metrics, and an offline eval harness.
+A polished, full-stack Gemini-style AI assistant built with Next.js, TypeScript, LangChain, Google Gemini, MongoDB, and NextAuth. It is designed as both a working product and a portfolio project for demonstrating modern Gen AI engineering.
+
+This app lets you chat with an AI, upload documents to build a personal knowledge base, switch into agent mode for tool-based tasks, analyze images, and review request metrics and eval results.
 
 **Repository:** [github.com/Santosh-Pathak/Gemini-Clone](https://github.com/Santosh-Pathak/Gemini-Clone)
 
-## Features
+## What this project can do
 
-| Feature | Description |
-|---------|-------------|
-| **Secure LLM** | Server-side Gemini; OAuth + rate limits |
-| **LangChain** | Prompt templates, chains, Zod structured output |
-| **Memory** | Full-thread context with summarization for long chats |
-| **RAG** | Upload docs → chunk → embed → cited answers |
-| **Agent mode** | Calculator, datetime, web search, recent chats |
-| **Vision** | Image upload, GridFS persistence, Describe/OCR/Diagram presets |
-| **Metrics** | Admin dashboard + CSV export (`/app/metrics`) |
-| **Evals** | 25-case offline eval harness (`npm run eval`) |
+### 1. Smart chat experience
+- Stream responses in real time
+- Keep chat history across sessions
+- Use long-thread memory with summarization for better continuity
+- Support rewrite and fact-check style workflows
+
+### 2. Knowledge / RAG
+- Upload PDF, TXT, or MD files
+- Chunk and embed documents for retrieval
+- Ask questions grounded in your uploaded content
+- See cited sources in the response flow
+
+### 3. Agent mode
+- Use tools such as calculator, date/time, web search, and recent chat lookup
+- See intermediate tool steps while the assistant works
+- Switch between normal chat and tool-using agent behavior
+
+### 4. Vision capabilities
+- Upload images and ask questions about them
+- Use presets like Describe, OCR, and Diagram explanations
+- Persist images for later chat context
+
+### 5. Production-minded AI features
+- Server-side Gemini calls with auth and rate limiting
+- Feature flags to enable or disable RAG, agent, and vision modes
+- Request metrics and admin-only metrics dashboard
+- Offline eval harness for prompt and response quality checks
+
+## Tech stack
+
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Zustand for client state
+- NextAuth for Google authentication
+- MongoDB + Mongoose
+- LangChain.js + Google Gemini
+- Zod for structured outputs
 
 ## Quick start
+
+### Prerequisites
+- Node.js 20+
+- MongoDB instance
+- Google OAuth credentials
+- Gemini API key
+
+### Setup
 
 ```bash
 git clone https://github.com/Santosh-Pathak/Gemini-Clone.git
 cd Gemini-Clone
 cp .env.sample .env
-# Fill in GOOGLE_API_KEY, GOOGLE_ID, GOOGLE_SECRET, MONGODB_URI, NEXTAUTH_*
+# Fill in the required environment variables
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), sign in with Google, and start chatting at `/app`.
+Open http://localhost:3000 and sign in with Google.
 
 ## Environment variables
 
-See [`.env.sample`](.env.sample).
+See [.env.sample](.env.sample).
 
-**Required**
-
-| Variable | Purpose |
-|----------|---------|
-| `GOOGLE_API_KEY` | Gemini API (server only — never `NEXT_PUBLIC_*`) |
-| `GOOGLE_ID` / `GOOGLE_SECRET` | Google OAuth |
-| `MONGODB_URI` | MongoDB connection |
-| `NEXTAUTH_SECRET` | Session encryption (`openssl rand -base64 32`) |
-| `NEXTAUTH_URL` | App base URL (e.g. `http://localhost:3000`) |
-
-**Optional**
+### Required
 
 | Variable | Purpose |
 |----------|---------|
-| `TAVILY_API_KEY` | Better agent web search (else DuckDuckGo) |
-| `ADMIN_EMAILS` | Comma-separated emails for `/app/metrics` |
-| `FEATURE_AGENT_ENABLED` | Set `false` to disable agent mode |
-| `FEATURE_RAG_ENABLED` | Set `false` to disable Knowledge/RAG |
-| `FEATURE_VISION_ENABLED` | Set `false` to disable image uploads |
+| GOOGLE_API_KEY | Gemini API key on the server only |
+| GOOGLE_ID | Google OAuth client ID |
+| GOOGLE_SECRET | Google OAuth client secret |
+| MONGODB_URI | MongoDB connection string |
+| NEXTAUTH_SECRET | Session encryption secret |
+| NEXTAUTH_URL | App base URL, usually http://localhost:3000 |
+
+### Optional
+
+| Variable | Purpose |
+|----------|---------|
+| TAVILY_API_KEY | Better web search for agent mode |
+| ADMIN_EMAILS | Allowlist for metrics dashboard access |
+| FEATURE_AGENT_ENABLED | Disable agent mode if needed |
+| FEATURE_RAG_ENABLED | Disable knowledge/RAG mode if needed |
+| FEATURE_VISION_ENABLED | Disable image features if needed |
+
+## How the app works
+
+The app follows a simple flow:
+
+1. User sends a message or image from the UI
+2. The Next.js API route handles auth, validation, and feature checks
+3. LangChain orchestrates the prompt, memory, RAG context, and tools
+4. Gemini generates the response
+5. The app saves chat state, images, and metrics to MongoDB
+
+## Feature walkthrough
+
+A typical portfolio demo could be:
+
+1. Sign in and send a streaming chat message
+2. Turn on Knowledge mode and upload a document
+3. Ask a question about the document and see citations appear
+4. Switch to Agent mode and run a simple tool-based prompt
+5. Upload an image and ask the assistant to describe it
 
 ## Scripts
 
 ```bash
-npm run dev        # development server
-npm run build      # production build
-npm run lint       # ESLint (Next.js)
-npm run typecheck  # TypeScript
-npm test           # unit tests (no live LLM)
-npm run eval       # offline LLM eval (uses API credits)
+npm run dev        # start the development server
+npm run build      # create a production build
+npm run lint       # run ESLint
+npm run typecheck  # run TypeScript checks
+npm test           # run unit tests
+npm run eval       # run the offline evaluation harness
 ```
 
-## Deploy (Vercel + MongoDB Atlas)
+## Deployment
 
-1. Push to GitHub and import the repo in [Vercel](https://vercel.com).
-2. Create a free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster; copy the connection string to `MONGODB_URI`.
-3. Create [Google OAuth credentials](https://console.cloud.google.com/) with redirect URI `https://<your-app>.vercel.app/api/auth/callback/google`.
-4. Add all env vars from `.env.sample` in Vercel project settings.
-5. Set `ADMIN_EMAILS` to your Google account email to access `/app/metrics`.
-6. Redeploy and test sign-in → chat → optional RAG/agent/vision flows.
+For a live deployment:
+
+1. Push the project to GitHub
+2. Deploy to Vercel
+3. Create a MongoDB Atlas cluster
+4. Configure the environment variables in Vercel
+5. Set ADMIN_EMAILS for metrics access
 
 ## Architecture
 
-```
+```text
 Browser → Next.js API routes → LangChain.js → Gemini
                 ↓
-            MongoDB (chats, RAG chunks, GridFS images, metrics)
+            MongoDB (chats, RAG data, images, metrics)
 ```
 
-Full details: **[SYSTEM-DESIGN.md](SYSTEM-DESIGN.md)**
+More details are available in [SYSTEM-DESIGN.md](SYSTEM-DESIGN.md).
 
-## Demo script (for portfolio video)
+## Project documentation
 
-1. Sign in → send a streaming chat message
-2. Enable **Knowledge** → upload a PDF → ask a question (cited sources)
-3. Switch to **Agent** → “What is 15% of 240?” (tool steps stream)
-4. Upload an image → **Describe** preset
-
-Record a 2–3 min walkthrough and link it in your README or LinkedIn.
-
-## CI
-
-GitHub Actions runs lint, typecheck, unit tests, and build on push/PR to `main` ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
-
-## Roadmap & resume
-
-Phased implementation (Phases 0–8 complete): [`RESUME-ENHANCEMENT-ROADMAP.md`](RESUME-ENHANCEMENT-ROADMAP.md)
-
-**Resume one-liner:** Built a production-minded Gen AI assistant with LangChain orchestration, per-user RAG, tool-using agents, multimodal vision, eval harness, and request metrics on Next.js + MongoDB.
+- [RESUME-ENHANCEMENT-ROADMAP.md](RESUME-ENHANCEMENT-ROADMAP.md) — roadmap and portfolio positioning
+- [SYSTEM-DESIGN.md](SYSTEM-DESIGN.md) — architecture and threat model
+- [.github/workflows/ci.yml](.github/workflows/ci.yml) — CI pipeline
 
 ## License
 
-Portfolio / educational use — adjust as needed.
+Portfolio and educational use.
